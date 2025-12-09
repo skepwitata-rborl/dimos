@@ -30,7 +30,6 @@ from dimos import core
 from dimos.core import In, Module, Out, rpc
 from dimos.msgs.geometry_msgs import Pose, PoseStamped, Transform, Vector3
 from dimos.msgs.sensor_msgs import Image
-from dimos.perception.spatial_perception import SpatialMemory
 from dimos.protocol import pubsub
 from dimos.protocol.tf import TF
 from dimos.robot.foxglove_bridge import FoxgloveBridge
@@ -101,42 +100,50 @@ class FakeRTC(UnitreeWebRTCConnection):
         print("move supressed", vector)
 
 
-class ConnectionModule(FakeRTC, Module):
+class ConnectionModule(Module):
     movecmd: In[Vector3] = None
     odom: Out[Vector3] = None
     lidar: Out[LidarMessage] = None
     video: Out[VideoMessage] = None
     ip: str
+    simulated: bool
 
     _odom: Callable[[], Odometry]
     _lidar: Callable[[], LidarMessage]
 
     @rpc
     def move(self, vector: Vector3):
-        super().move(vector)
+        self.connection.move(vector)
 
-    def __init__(self, ip: str, *args, **kwargs):
+    def __init__(self, ip: str, simulated: bool = False, *args, **kwargs):
         self.ip = ip
+        self.simulated = simulated
         self.tf = TF()
         Module.__init__(self, *args, **kwargs)
 
     @rpc
     def start(self):
-        # Initialize the parent WebRTC connection
-        super().__init__(self.ip)
+        # Initialize the appropriate connection type
+        if self.simulated:
+            self.connection = FakeRTC(self.ip)
+        else:
+            self.connection = UnitreeWebRTCConnection(self.ip)
+
         self.tf = TF()
         # Connect sensor streams to LCM outputs
-        self.lidar_stream().subscribe(self.lidar.publish)
-        self.odom_stream().subscribe(self.odom.publish)
-        self.video_stream().subscribe(self.video.publish)
-        self.tf_stream().subscribe(self.tf.publish)
+        self.connection.lidar_stream().subscribe(self.lidar.publish)
+        self.connection.odom_stream().subscribe(self.odom.publish)
+        self.connection.video_stream().subscribe(self.video.publish)
+
+        if hasattr(self.connection, "tf_stream"):
+            self.connection.tf_stream().subscribe(self.tf.publish)
 
         # Connect LCM input to robot movement commands
         self.movecmd.subscribe(self.move)
 
         # Set up streaming getters for latest sensor data
-        self._odom = getter_streaming(self.odom_stream())
-        self._lidar = getter_streaming(self.lidar_stream())
+        self._odom = getter_streaming(self.connection.odom_stream())
+        self._lidar = getter_streaming(self.connection.lidar_stream())
 
     @rpc
     def get_local_costmap(self) -> Costmap:
@@ -149,6 +156,16 @@ class ConnectionModule(FakeRTC, Module):
     @rpc
     def get_pos(self) -> Vector:
         return self._odom().position
+
+    @rpc
+    def standup(self):
+        """Make the robot stand up."""
+        return self.connection.standup()
+
+    @rpc
+    def liedown(self):
+        """Make the robot lie down."""
+        return self.connection.liedown()
 
 
 class ControlModule(Module):
@@ -170,9 +187,11 @@ class UnitreeGo2Light:
         self,
         ip: str,
         output_dir: str = os.path.join(os.getcwd(), "assets", "output"),
+        simulated: bool = False,
     ):
         self.output_dir = output_dir
         self.ip = ip
+        self.simulated = simulated
         self.dimos = None
         self.connection = None
         self.mapper = None
@@ -182,33 +201,11 @@ class UnitreeGo2Light:
         self.foxglove_bridge = None
         self.ctrl = None
 
-        # Spatial Memory Initialization ======================================
-        # Create output directory
-        os.makedirs(self.output_dir, exist_ok=True)
-        logger.info(f"Robot outputs will be saved to: {self.output_dir}")
-
-        # Initialize memory directories
-        self.memory_dir = os.path.join(self.output_dir, "memory")
-        os.makedirs(self.memory_dir, exist_ok=True)
-
-        # Initialize spatial memory properties
-        self.spatial_memory_dir = os.path.join(self.memory_dir, "spatial_memory")
-        self.spatial_memory_collection = "spatial_memory"
-        self.db_path = os.path.join(self.spatial_memory_dir, "chromadb_data")
-        self.visual_memory_path = os.path.join(self.spatial_memory_dir, "visual_memory.pkl")
-
-        # Create spatial memory directory
-        os.makedirs(self.spatial_memory_dir, exist_ok=True)
-        os.makedirs(self.db_path, exist_ok=True)
-
-        self.spatial_memory_module = None
-        # ==============================================================
-
     async def start(self):
         self.dimos = core.start(4)
 
         # Connection Module - Robot sensor data interface via WebRTC ===================
-        self.connection = self.dimos.deploy(ConnectionModule, self.ip)
+        self.connection = self.dimos.deploy(ConnectionModule, self.ip, self.simulated)
 
         # This enables LCM transport
         # Ensures system multicast, udp sizes are auto-adjusted if needed
@@ -256,25 +253,6 @@ class UnitreeGo2Light:
             get_robot_pos=self.connection.get_pos,
             set_local_nav=self.local_planner.navigate_path_local,
         )
-
-        # Spatial Memory Module ======================================
-        self.spatial_memory_module = self.dimos.deploy(
-            SpatialMemory,
-            collection_name=self.spatial_memory_collection,
-            db_path=self.db_path,
-            visual_memory_path=self.visual_memory_path,
-            output_dir=self.spatial_memory_dir,
-        )
-
-        # Connect video and odometry streams to spatial memory
-        self.spatial_memory_module.video.connect(self.connection.video)
-        self.spatial_memory_module.odom.connect(self.connection.odom)
-
-        # Start the spatial memory module
-        self.spatial_memory_module.start()
-
-        logger.info("Spatial memory module deployed and connected")
-        # ==============================================================
 
         # Configure AstarPlanner OUTPUT path: Out[Path] to /global_path LCM topic
         self.global_planner.path.transport = core.pLCMTransport("/global_path")
@@ -387,15 +365,6 @@ class UnitreeGo2Light:
         if not self.mapper:
             raise RuntimeError("Mapper not initialized. Call start() first.")
         return self.mapper.costmap
-
-    @property
-    def spatial_memory(self) -> Optional[SpatialMemory]:
-        """Get the robot's spatial memory module.
-
-        Returns:
-            SpatialMemory module instance or None if perception is disabled
-        """
-        return self.spatial_memory_module
 
     def get_video_stream(self, fps: int = 30) -> Observable:
         """Get the video stream with rate limiting and processing.

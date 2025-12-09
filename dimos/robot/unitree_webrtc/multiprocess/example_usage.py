@@ -63,7 +63,7 @@ async def run_heavy_robot():
     ip = os.getenv("ROBOT_IP")
 
     # Create heavy robot instance with all features
-    robot = UnitreeGo2Heavy(ip=ip, new_memory=True, enable_perception=True)
+    robot = UnitreeGo2Heavy(ip=ip, new_memory=True, enable_perception=False)
 
     # Start the robot
     await robot.start()

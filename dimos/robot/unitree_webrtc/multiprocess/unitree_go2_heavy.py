@@ -15,6 +15,7 @@
 """Heavy version of Unitree Go2 with GPU-required modules."""
 
 import asyncio
+import os
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -26,6 +27,7 @@ from reactivex.scheduler import ThreadPoolScheduler
 from dimos import core
 from dimos.perception.object_tracker import ObjectTrackingStream
 from dimos.perception.person_tracker import PersonTrackingStream
+from dimos.perception.spatial_perception import SpatialMemory
 from dimos.robot.unitree_webrtc.multiprocess.unitree_go2 import UnitreeGo2Light
 from dimos.robot.unitree_webrtc.unitree_skills import MyUnitreeSkills
 from dimos.skills.skills import AbstractRobotSkill, SkillLibrary
@@ -50,6 +52,7 @@ class UnitreeGo2Heavy(UnitreeGo2Light):
     def __init__(
         self,
         ip: str,
+        output_dir: str = None,
         skill_library: Optional[SkillLibrary] = None,
         robot_capabilities: Optional[List[RobotCapability]] = None,
         spatial_memory_collection: str = "spatial_memory",
@@ -70,6 +73,11 @@ class UnitreeGo2Heavy(UnitreeGo2Light):
             pool_scheduler: Thread pool scheduler for async operations
         """
         super().__init__(ip)
+
+        # Set output directory
+        if output_dir is None:
+            output_dir = os.path.join(os.getcwd(), "assets", "output")
+        self.output_dir = output_dir
 
         self.enable_perception = enable_perception
         self.disposables = CompositeDisposable()
@@ -108,12 +116,53 @@ class UnitreeGo2Heavy(UnitreeGo2Light):
         self.person_tracker = None
         self.object_tracker = None
 
+        # Spatial Memory Initialization ======================================
+        # Create output directory
+        os.makedirs(self.output_dir, exist_ok=True)
+        logger.info(f"Robot outputs will be saved to: {self.output_dir}")
+
+        # Initialize memory directories
+        self.memory_dir = os.path.join(self.output_dir, "memory")
+        os.makedirs(self.memory_dir, exist_ok=True)
+
+        # Initialize spatial memory properties
+        self.spatial_memory_dir = os.path.join(self.memory_dir, "spatial_memory")
+        self.spatial_memory_collection = spatial_memory_collection
+        self.db_path = os.path.join(self.spatial_memory_dir, "chromadb_data")
+        self.visual_memory_path = os.path.join(self.spatial_memory_dir, "visual_memory.pkl")
+
+        # Create spatial memory directory
+        os.makedirs(self.spatial_memory_dir, exist_ok=True)
+        os.makedirs(self.db_path, exist_ok=True)
+
+        self.spatial_memory_module = None
+        # ==============================================================
+
     async def start(self):
         """Start the robot modules and initialize heavy components."""
         # First start the lightweight components
         await super().start()
 
         await asyncio.sleep(0.5)
+
+        # Spatial Memory Module ======================================
+        self.spatial_memory_module = self.dimos.deploy(
+            SpatialMemory,
+            collection_name=self.spatial_memory_collection,
+            db_path=self.db_path,
+            visual_memory_path=self.visual_memory_path,
+            output_dir=self.spatial_memory_dir,
+        )
+
+        # Connect video and odometry streams to spatial memory
+        self.spatial_memory_module.video.connect(self.connection.video)
+        self.spatial_memory_module.odom.connect(self.connection.odom)
+
+        # Start the spatial memory module
+        self.spatial_memory_module.start()
+
+        logger.info("Spatial memory module deployed and connected")
+        # ==============================================================
 
         # Now we have connection publishing to LCM, initialize video stream
         self._video_stream = self.get_video_stream(fps=10)  # Lower FPS for processing
@@ -212,11 +261,28 @@ class UnitreeGo2Heavy(UnitreeGo2Light):
         """
         return capability in self.capabilities
 
+    @property
+    def spatial_memory(self) -> Optional[SpatialMemory]:
+        """Get the robot's spatial memory module.
+
+        Returns:
+            SpatialMemory module instance or None if not initialized
+        """
+        return self.spatial_memory_module
+
     def cleanup(self):
         """Clean up resources used by the robot."""
         # Dispose of reactive resources
         if self.disposables:
             self.disposables.dispose()
+
+        # Clean up spatial memory
+        if self.spatial_memory_module:
+            try:
+                self.spatial_memory_module.cleanup()
+            except Exception as e:
+                logger.warning(f"Error cleaning up spatial memory: {e}")
+            self.spatial_memory_module = None
 
         # Clean up tracking modules
         if self.person_tracker_module:
