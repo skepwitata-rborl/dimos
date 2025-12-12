@@ -93,6 +93,8 @@ class Metric3D:
             'do_copy_in_default_stream': True,
         }
 
+        self.contains_io_binding = False
+
         if provider == 'auto':
             # Try CUDA, then TensorRT, then CPU
             available_providers = ort.get_available_providers()
@@ -101,21 +103,29 @@ class Metric3D:
                     ('TensorrtExecutionProvider', tensorrt_opts),
                     ('CUDAExecutionProvider', cuda_opts)
                 ]
+                self.contains_io_binding = True
             elif 'CUDAExecutionProvider' in available_providers:
                 providers = [('CUDAExecutionProvider', cuda_opts)]
+                self.contains_io_binding = True
             else:
                 providers = ['CPUExecutionProvider']
         elif provider == 'cuda':
             providers = [('CUDAExecutionProvider', cuda_opts)]
+            self.contains_io_binding = True
         elif provider == 'tensorrt':
             providers = [('TensorrtExecutionProvider', tensorrt_opts)]
+            self.contains_io_binding = True
         else:
             providers = ['CPUExecutionProvider']
         
         print(f"############################################# Using providers: {providers} ###########################################################")
         
         self.session = ort.InferenceSession(onnx_model_path, providers=providers)
-
+        if self.contains_io_binding:
+            io = self.session.io_binding()
+            io.bind_output(name="out", device_type="cuda", device_id=0)  # keep output on GPU
+            self.io_binding = io
+        
     """
     Input: Single image in RGB format
     Output: Depth map
@@ -168,10 +178,21 @@ class Metric3D:
         chw = np.transpose(rgb, (2, 0, 1)).astype(np.float32)
         chw = (chw - mean) / std
 
-        onnx_input = {
-            "image": np.ascontiguousarray(chw[None]), dtype=np.float32  # shape: (1, 3, H, W)
-        }
-        return onnx_input, rgb_image.shape[:2]
+        if self.contains_io_binding:
+            # This allocates/copies to device each frame:
+            x_dev = ort.OrtValue.ortvalue_from_numpy(chw[None], 'cuda', 0)
+
+            # Bind by pointer (avoids an extra copy inside ORT)
+            self.io_binding.bind_input(
+                name='image', device_type='cuda', device_id=0,
+                element_type=np.float32, shape=x_dev.shape(), buffer_ptr=x_dev.data_ptr()
+            )
+            return self.io_binding, rgb_image.shape[:2]
+        else:
+            onnx_input = {
+                "image": np.ascontiguousarray(chw[None], dtype=np.float32) # shape: (1, 3, H, W)
+            }
+            return onnx_input, rgb_image.shape[:2]
 
     def infer_depth(self, img, debug=False):
         if debug:
@@ -187,8 +208,13 @@ class Metric3D:
             return np.array([])
 
         onnx_input, original_shape = self.prepare_input(self.rgb_origin)
-        outputs = self.session.run(None, onnx_input)
-        depth = outputs[0].squeeze()  # [H, W]
+        if self.contains_io_binding:
+            self.session.run_with_iobinding(onnx_input)
+            out_dev = self.io_binding.get_outputs()[0]
+            depth = out_dev.numpy().squeeze()
+        else:
+            outputs = self.session.run(None, onnx_input)
+            depth = outputs[0].squeeze()  # [H, W]
 
         # Remove padding
         pad_info = self.pad_info
