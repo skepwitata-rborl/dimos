@@ -161,10 +161,15 @@ class Metric3D:
             value=padding,
         )
         self.pad_info = [pad_h_half, pad_h - pad_h_half, pad_w_half, pad_w - pad_w_half]
+        mean = np.array([123.675, 116.28, 103.53], dtype=np.float32)[:, None, None]
+        std = np.array([58.395, 57.12, 57.375], dtype=np.float32)[:, None, None]
+
+        # HWC -> CHW, normalize in one go
+        chw = np.transpose(rgb, (2, 0, 1)).astype(np.float32)
+        chw = (chw - mean) / std
+
         onnx_input = {
-            "image": np.ascontiguousarray(
-                np.transpose(rgb, (2, 0, 1))[None], dtype=np.float32
-            ),  # 1, 3, H, W
+            "image": np.ascontiguousarray(chw[None]), dtype=np.float32  # shape: (1, 3, H, W)
         }
         return onnx_input, rgb_image.shape[:2]
 
