@@ -163,11 +163,12 @@ class UnitreeCameraModule(Module):
         # Close attached slot
         try:
             if self.slot:
-                self.slot.close()
+                if not (self._source and self.slot is getattr(self._source, "channel", None)):
+                    self.slot.close()
         except Exception:
             pass
 
-        # Close source (owner channel)
+        # Close source (owner of the channel)
         try:
             if self._source:
                 self._source.close()
@@ -198,18 +199,10 @@ class UnitreeCameraModule(Module):
                 # 1) Create SourceActor that OWNS the channel
                 self._source = SourceActor(shape=shape, dtype=dtype, prefer=prefer, device_id=0)
 
-                # 2) Get descriptor for attachments
-                self._desc = self._source.descriptor()
+                # 2) Same-process fast-path: use the SourceActor's channel directly (no IPC attach)
+                self.slot = self._source.channel
 
-                # 3) Attach a reader slot for MultiRateProcessor
-                if prefer == "cuda":
-                    logger.info("CUDA IPC FACTORY ATTACHING")
-                    self.slot = CUDA_IPC_Factory.attach(self._desc)
-                else:
-                    logger.info("CPU IPC FACTORY ATTACHING")
-                    self.slot = CPU_IPC_Factory.attach(self._desc)
-
-                # 4) Build processor on the attached reader slot
+                # 3) Build processor on the attached reader slot
                 self._multirateprocessor = MultiRateProcessor(
                     channel=self.slot,
                     target_fps_by_model={"depth": 15},
@@ -288,6 +281,7 @@ class UnitreeCameraModule(Module):
 
             publish_start = time.perf_counter()
 
+            """
             # Publish color image (if available)
             if self._last_image is not None:
                 color_msg = Image(
@@ -299,6 +293,7 @@ class UnitreeCameraModule(Module):
                 self.color_image.publish(color_msg)
                 color_end = time.perf_counter()
                 logger.info(f"Color publish: {(color_end - publish_start) * 1000:.1f}ms")
+            """
 
             # Publish depth + colorized
             if self._last_depth is not None:
@@ -310,8 +305,9 @@ class UnitreeCameraModule(Module):
                 )
                 self.depth_image.publish(depth_msg)
                 depth_end = time.perf_counter()
-                logger.info(f"Depth publish: {(depth_end - color_end) * 1000:.1f}ms")
+                logger.info(f"Depth publish: {(depth_end - publish_start) * 1000:.1f}ms")
 
+                """
                 depth_colorized_array = colorize_depth(
                     self._last_depth, max_depth=10.0, overlay_stats=True
                 )
@@ -325,6 +321,7 @@ class UnitreeCameraModule(Module):
                     self.depth_colorized.publish(depth_colorized_msg)
                     colorized_end = time.perf_counter()
                     logger.info(f"Colorized publish: {(colorized_end - depth_end) * 1000:.1f}ms")
+                """
 
             # Camera info & pose
             self._publish_camera_info(header)

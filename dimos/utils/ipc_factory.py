@@ -171,9 +171,11 @@ class CpuShmChannel(FrameChannel):
             offset=inactive * self._nbytes,
         )
         np.copyto(view, frame, casting="no")
-        self._ctrl[1] = np.int64(time.time_ns())
-        self._ctrl[0] += 1
+        ts = np.int64(time.time_ns())
+        # Publish order: ts -> idx -> seq
+        self._ctrl[1] = ts
         self._ctrl[2] = inactive
+        self._ctrl[0] += 1
 
     def read(self, last_seq: int = -1, require_new=True):
         for _ in range(3):
@@ -258,6 +260,7 @@ class CudaIpcChannel(FrameChannel):
         self._finalizer_ctrl = weakref.finalize(self, _safe_unlink, self._shm_ctrl.name)
 
         self._is_owner = True
+        self._attached_desc = None
         self._handles = None  # lazy export
         self._ipc_ptrs = []  # used on attach only
 
@@ -294,9 +297,11 @@ class CudaIpcChannel(FrameChannel):
             else:
                 dst.set(frame)
         self._h2d_stream.synchronize()
-        self._ctrl[1] = np.int64(time.time_ns())
-        self._ctrl[0] += 1
+        ts = np.int64(time.time_ns())
+        # Publish order: ts -> idx -> seq
+        self._ctrl[1] = ts
         self._ctrl[2] = inactive
+        self._ctrl[0] += 1
 
     def read(self, last_seq: int = -1, require_new: bool = True):
         seq1 = int(self._ctrl[0])
@@ -310,7 +315,11 @@ class CudaIpcChannel(FrameChannel):
         return last_seq, 0, None
 
     def descriptor(self) -> dict:
-        if self._handles is None:
+        if not getattr(self, "_is_owner", False):
+            d = dict(self._attached_desc or {})
+            d["ctrl_name"] = self._shm_ctrl.name
+            return d
+        if getattr(self, "_handles", None) is None:
             _ensure_cuda_context(self._cp, self._device)
             with self._cp.cuda.Device(self._device):
                 h0 = self._cp.cuda.runtime.ipcGetMemHandle(int(self._bufs[0].data.ptr))
@@ -322,7 +331,8 @@ class CudaIpcChannel(FrameChannel):
             "shape": self._shape,
             "dtype": self._dtype.str,
             "device": self._device,  # informational; attach will prefer PCI
-            "pci": pci,  # <<< new
+            "pci": pci,
+            "pid": os.getpid(),
             "nbytes": self._nbytes,
             "ctrl_name": self._shm_ctrl.name,
             "ptr0": int(self._bufs[0].data.ptr),
@@ -347,6 +357,9 @@ class CudaIpcChannel(FrameChannel):
         obj._ctrl = np.ndarray((3,), dtype=np.int64, buffer=obj._shm_ctrl.buf)
         obj._finalizer_ctrl = None
 
+        obj._is_owner = False
+        obj._attached_desc = dict(desc)
+
         # Map to correct local device via PCI (handles CUDA_VISIBLE_DEVICES)
         target_pci = tuple(desc.get("pci", (0, -1, -1)))
         local_dev = _map_pci_to_local_device(cp, target_pci)
@@ -365,9 +378,11 @@ class CudaIpcChannel(FrameChannel):
             except Exception:
                 return False
 
-        # Prefer RAW POINTER path if present and accessible in this context
+        # Prefer RAW POINTER path if same PID as exporter (same process) and present and accessible in this context
+        same_pid = int(desc.get("pid", -1)) == os.getpid()
         use_ptrs = (
-            "ptr0" in desc
+            same_pid
+            and "ptr0" in desc
             and "ptr1" in desc
             and _ptr_accessible(int(desc["ptr0"]))
             and _ptr_accessible(int(desc["ptr1"]))
