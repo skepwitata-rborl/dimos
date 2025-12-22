@@ -143,17 +143,19 @@ atexit.register(_cleanup_mainloop_at_exit)
 class GStreamerNodeConfig(BaseModel):
     """Configuration for GStreamer nodes with format control.
 
-    Default output is Vorbis compressed - good compression, low CPU usage,
-    excellent quality, and included in GStreamer base plugins. For raw audio, use PCM formats.
+    Default output is raw PCM F32LE - the standard internal format for passing audio
+    between pipeline stages. Compressed formats (Vorbis, Opus) need container/framing
+    headers to work through appsrc→decodebin, making raw audio more reliable for
+    internal use. Compression should happen at final outputs (network, file).
 
     The output field accepts either:
     - AudioSpec object: AudioSpec(format=AudioFormat.PCM_F32LE, sample_rate=48000, channels=2)
     - String shortcuts: "raw", "vorbis", "opus", "mp3", "flac", etc.
-    - AudioFormat enum names: "PCM_F32LE", "PCM_S16LE", "VORBIS", etc.
+    - AudioFormat enum names: "PCM_F32LE", "PCM_S16LE", "OPUS", etc.
     """
 
     output: Union[str, AudioSpec] = Field(
-        default_factory=lambda: AudioSpec(format=AudioFormat.VORBIS),
+        default_factory=lambda: AudioSpec(format=AudioFormat.PCM_F32LE),
         description="Output audio specification (str or AudioSpec)",
     )
     properties: dict[str, Any] = Field(

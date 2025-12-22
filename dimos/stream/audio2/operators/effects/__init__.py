@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright 2025 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,14 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Audio processing operators.
+"""Audio effects operators."""
 
-All operators work on raw PCM audio (standard internal format).
-Inputs decode to raw, outputs encode from raw.
-"""
+from .pitch_shift import pitch_shift
+from .ring_modulator import ring_modulator
+from .robotize import robotize
 
-from dimos.stream.audio2.operators.effects import pitch_shift, ring_modulator, robotize
-from dimos.stream.audio2.operators.raw_normalizer import raw_normalizer as normalizer
-from dimos.stream.audio2.operators.raw_vumeter import raw_vumeter as vumeter
-
-__all__ = ["normalizer", "vumeter", "robotize", "pitch_shift", "ring_modulator"]
+__all__ = ["pitch_shift", "ring_modulator", "robotize"]

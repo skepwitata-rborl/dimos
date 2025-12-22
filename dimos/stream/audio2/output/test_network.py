@@ -22,7 +22,7 @@ import pytest
 from dimos.stream.audio2.input import microphone
 from dimos.stream.audio2.input.file import file_input
 from dimos.stream.audio2.input.signal import WaveformType, signal
-from dimos.stream.audio2.operators import normalizer, robotize, vumeter
+from dimos.stream.audio2.operators import normalizer, raw_normalizer, robotize, vumeter
 from dimos.stream.audio2.output.network import network_output
 from dimos.stream.audio2.types import AudioFormat, AudioSpec
 from dimos.utils.data import get_data
@@ -83,6 +83,7 @@ def test_network_output_to_server_file():
     ).pipe(
         robotize(),
         vumeter(),
+        normalizer(),
         network_output(host=host, port=5002, codec="opus"),
     ).run()
 

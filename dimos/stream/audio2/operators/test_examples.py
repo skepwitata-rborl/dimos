@@ -19,11 +19,10 @@ import time
 import pytest
 
 from dimos.stream.audio2.input.signal import WaveformType, signal
-from dimos.stream.audio2.operators.raw_normalizer import raw_normalizer
-from dimos.stream.audio2.operators.raw_vumeter import raw_vumeter
+from dimos.stream.audio2.operators import normalizer, vumeter
+from dimos.stream.audio2.operators.utils import calculate_rms_volume
 from dimos.stream.audio2.output.soundcard import speaker
 from dimos.stream.audio2.types import AudioFormat, AudioSpec
-from dimos.stream.audio2.operators.utils import calculate_rms_volume
 
 
 def test_vumeter_with_playback():
@@ -34,13 +33,13 @@ def test_vumeter_with_playback():
         volume=0.5,
         duration=0.5,  # Shorter for testing
         output=AudioSpec(format=AudioFormat.PCM_F32LE),
-    ).pipe(raw_vumeter(), speaker()).run()
+    ).pipe(vumeter(), speaker()).run()
 
     # Give cleanup threads time to finish
     time.sleep(1.0)
 
 
-def test_normalize_quiet_audio_with_raw_vumeter():
+def test_normalize_quiet_audio_with_vumeter():
     """Example 2: Normalize quiet audio and monitor with VU meter."""
     signal(
         waveform=WaveformType.SINE,
@@ -49,9 +48,9 @@ def test_normalize_quiet_audio_with_raw_vumeter():
         duration=0.5,  # Shorter for testing
         output=AudioSpec(format=AudioFormat.PCM_F32LE),
     ).pipe(
-        raw_vumeter(bar_length=30),  # Show input level
-        raw_normalizer(target_level=0.8),  # Normalize to 80%
-        raw_vumeter(bar_length=30),  # Show output level
+        vumeter(bar_length=30),  # Show input level
+        normalizer(target_level=0.8),  # Normalize to 80%
+        vumeter(bar_length=30),  # Show output level
         speaker(),
     ).run()
 
@@ -68,8 +67,8 @@ def test_rms_normalization_and_metering():
         duration=0.5,  # Shorter for testing
         output=AudioSpec(format=AudioFormat.PCM_F32LE),
     ).pipe(
-        raw_normalizer(volume_func=calculate_rms_volume, target_level=0.7),
-        raw_vumeter(volume_func=calculate_rms_volume),
+        normalizer(volume_func=calculate_rms_volume, target_level=0.7),
+        vumeter(volume_func=calculate_rms_volume),
         speaker(),
     ).run()
 
@@ -85,7 +84,7 @@ def test_vumeter_without_playback():
         volume=0.5,
         duration=0.5,
         output=AudioSpec(format=AudioFormat.PCM_F32LE),
-    ).pipe(raw_vumeter()).run()
+    ).pipe(vumeter()).run()
 
     # Give cleanup threads time to finish
     time.sleep(0.2)
@@ -99,7 +98,7 @@ def test_normalizer_without_playback():
         volume=0.1,
         duration=0.5,
         output=AudioSpec(format=AudioFormat.PCM_F32LE),
-    ).pipe(raw_normalizer(target_level=0.8)).run()
+    ).pipe(normalizer(target_level=0.8)).run()
 
     # Give cleanup threads time to finish
     time.sleep(0.2)
@@ -114,9 +113,9 @@ def test_chain_multiple_normalizers():
         duration=0.5,
         output=AudioSpec(format=AudioFormat.PCM_F32LE),
     ).pipe(
-        raw_normalizer(target_level=0.5),
-        raw_normalizer(target_level=0.8),
-        raw_vumeter(bar_length=20),
+        normalizer(target_level=0.5),
+        normalizer(target_level=0.8),
+        vumeter(bar_length=20),
     ).run()
 
     # Give cleanup threads time to finish
