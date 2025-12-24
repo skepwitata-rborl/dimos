@@ -159,13 +159,10 @@ class ObjectDBModule(Detection3DModule, TableStr):
 
     target: Out[PoseStamped] = None  # type: ignore
 
-    remembered_locations: Dict[str, PoseStamped]
-
     def __init__(self, goto: Callable[[PoseStamped], Any], *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.goto = goto
         self.objects = {}
-        self.remembered_locations = {}
 
     def closest_object(self, detection: Detection3DPC) -> Optional[Object3D]:
         # Filter objects to only those with matching names
@@ -257,8 +254,8 @@ class ObjectDBModule(Detection3DModule, TableStr):
 
         def update_objects(imageDetections: ImageDetections3DPC):
             for detection in imageDetections.detections:
-                # print(detection)
-                return self.add_detection(detection)
+                if detection.name != "person":
+                    self.add_detection(detection)
 
         def scene_thread():
             while True:

@@ -226,33 +226,61 @@ class UnitreeG1(Robot, Resource):
         os.makedirs(self.db_path, exist_ok=True)
 
     def _deploy_detection(self, goto):
-        detection = self._dimos.deploy(
-            ObjectDBModule, goto=goto, camera_info=zed.CameraInfo.SingleWebcam
+        from dimos.perception.detection.detectors.person.yolo import YoloPersonDetector
+        from dimos.perception.detection.detectors.yolo import Yolo2DDetector
+
+        detection3d = self._dimos.deploy(
+            ObjectDBModule,
+            goto=goto,
+            camera_info=zed.CameraInfo.SingleWebcam,
+            detector=YoloPersonDetector,
         )
 
-        detection.image.connect(self.camera.image)
-        detection.pointcloud.transport = core.LCMTransport("/map", PointCloud2)
+        detection3d.image.connect(self.camera.image)
+        detection3d.pointcloud.transport = core.LCMTransport("/map", PointCloud2)
 
-        detection.annotations.transport = core.LCMTransport("/annotations", ImageAnnotations)
-        detection.detections.transport = core.LCMTransport("/detections", Detection2DArray)
-
-        detection.scene_update.transport = core.LCMTransport("/scene_update", SceneUpdate)
-        detection.target.transport = core.LCMTransport("/target", PoseStamped)
-        detection.detected_pointcloud_0.transport = core.LCMTransport(
+        detection3d.detected_pointcloud_0.transport = core.LCMTransport(
             "/detected/pointcloud/0", PointCloud2
         )
-        detection.detected_pointcloud_1.transport = core.LCMTransport(
+        detection3d.detected_pointcloud_1.transport = core.LCMTransport(
             "/detected/pointcloud/1", PointCloud2
         )
-        detection.detected_pointcloud_2.transport = core.LCMTransport(
+        detection3d.detected_pointcloud_2.transport = core.LCMTransport(
             "/detected/pointcloud/2", PointCloud2
         )
 
-        detection.detected_image_0.transport = core.LCMTransport("/detected/image/0", Image)
-        detection.detected_image_1.transport = core.LCMTransport("/detected/image/1", Image)
-        detection.detected_image_2.transport = core.LCMTransport("/detected/image/2", Image)
+        detectiondb = self._dimos.deploy(
+            ObjectDBModule,
+            goto=goto,
+            camera_info=zed.CameraInfo.SingleWebcam,
+            detector=Yolo2DDetector,
+        )
 
-        self.detection = detection
+        detectiondb.image.connect(self.camera.image)
+        detectiondb.pointcloud.transport = core.LCMTransport("/map", PointCloud2)
+
+        detectiondb.annotations.transport = core.LCMTransport("/annotations", ImageAnnotations)
+        detectiondb.detections.transport = core.LCMTransport("/detections", Detection2DArray)
+
+        detectiondb.scene_update.transport = core.LCMTransport("/scene_update", SceneUpdate)
+        detectiondb.target.transport = core.LCMTransport("/target", PoseStamped)
+
+        detectiondb.detected_pointcloud_0.transport = core.LCMTransport(
+            "/db/pointcloud/0", PointCloud2
+        )
+        detectiondb.detected_pointcloud_1.transport = core.LCMTransport(
+            "/db/pointcloud/1", PointCloud2
+        )
+        detectiondb.detected_pointcloud_2.transport = core.LCMTransport(
+            "/db/pointcloud/2", PointCloud2
+        )
+
+        detectiondb.detected_image_0.transport = core.LCMTransport("/detected/image/0", Image)
+        detectiondb.detected_image_1.transport = core.LCMTransport("/detected/image/1", Image)
+        detectiondb.detected_image_2.transport = core.LCMTransport("/detected/image/2", Image)
+
+        self.detection3d = detection3d
+        self.detectiondb = detectiondb
 
     def start(self):
         self.lcm.start()
@@ -301,7 +329,7 @@ class UnitreeG1(Robot, Resource):
         agent.register_skills(human_input)
 
         if self.enable_perception:
-            agent.register_skills(self.detection)
+            agent.register_skills(self.detectiondb)
 
         # Register ROS navigation
         self._ros_nav = RosNavigation(self)
