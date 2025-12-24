@@ -249,7 +249,7 @@ def manipulate_object(frame: ControllerFrame):
 def handle_menu(frame: ControllerFrame):
     if frame.right:
         right = frame.right
-        
+
         if right.buttons.menu.pressed:
             toggle_menu()
         if right.buttons.x_or_a.pressed:
@@ -257,6 +257,99 @@ def handle_menu(frame: ControllerFrame):
         if right.buttons.y_or_b.pressed:
             back_button()
 ```
+
+## Robot Integration with PoseStamped
+
+The module provides PoseStamped outputs for seamless integration with robot arms and navigation systems. These outputs contain only position and orientation data.
+
+### Coordinate System Transform
+
+**By default**, the module automatically transforms WebXR coordinates to ROS REP-103 convention, ensuring VR controller movements correctly translate to robot movements:
+
+| Axis | WebXR (Quest 3) | ROS REP-103 |
+|------|----------------|-------------|
+| **Forward** | -Z (away from user) | +X |
+| **Left** | -X | +Y |
+| **Up** | +Y | +Z |
+
+**To disable transform** (use raw WebXR coordinates):
+```python
+quest = dimos.deploy(MetaQuestModule, port=8881, transform_to_ros=False)
+```
+
+### Direct Robot Arm Control
+```python
+from dimos.msgs.geometry_msgs import PoseStamped
+from dimos.vr.modules import MetaQuestModule
+
+# Deploy VR module
+quest = dimos.deploy(MetaQuestModule, port=8881)
+quest.start()
+
+# Connect controller poses to robot arm targets
+quest.controller_left_pose.subscribe(robot.set_left_arm_target)
+quest.controller_right_pose.subscribe(robot.set_right_arm_target)
+```
+
+### LCM Transport for ROS/Autonomy Stack
+```python
+from dimos.core import LCMTransport
+from dimos.msgs.geometry_msgs import PoseStamped
+
+# Publish controller poses to LCM
+quest.controller_left_pose.transport = LCMTransport("/vr/left_hand", PoseStamped)
+quest.controller_right_pose.transport = LCMTransport("/vr/right_hand", PoseStamped)
+```
+
+### Unitree Robot Integration
+```python
+# Example: Control Unitree G1 humanoid arms with VR controllers
+from dimos.robot.unitree_webrtc.unitree_g1 import UnitreeG1
+from dimos.core import LCMTransport
+
+robot = UnitreeG1(ip="192.168.123.123")
+quest = dimos.deploy(MetaQuestModule, port=8881)
+
+# Map VR controllers to robot arms
+quest.controller_left_pose.transport = LCMtransport("/vr/left_arm", PoseStamped)
+quest.controller_right_pose.transport = LCMtransport("/vr/right_arm", PoseStamped)
+
+robot.goal_request.connect(quest.controller_left_pose)
+
+quest.start()
+robot.start()
+```
+
+### PoseStamped Format
+```python
+# PoseStamped message structure
+pose = PoseStamped(
+    ts=time.time(),                    # Timestamp in seconds
+    frame_id="vr_left_controller",     # Frame ID: "vr_left_controller" or "vr_right_controller"
+    position=(x, y, z),                # Position in meters
+    orientation=(qx, qy, qz, qw),      # Quaternion (x, y, z, w)
+)
+
+# Access pose components
+x, y, z = pose.position.x, pose.position.y, pose.position.z
+qx, qy, qz, qw = pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w
+```
+
+### Coordinate Frames
+
+**With ROS Transform (default, `transform_to_ros=True`):**
+- **Left controller**: `frame_id="vr_left_controller_ros"`
+- **Right controller**: `frame_id="vr_right_controller_ros"`
+- **Coordinate system**: ROS REP-103 (X=forward, Y=left, Z=up)
+
+**Without Transform (`transform_to_ros=False`):**
+- **Left controller**: `frame_id="vr_left_controller_webxr"`
+- **Right controller**: `frame_id="vr_right_controller_webxr"`
+- **Coordinate system**: WebXR native (X=right, Y=up, Z=toward user)
+
+**Common:**
+- **Update rate**: 90Hz (same as controller data)
+- **Units**: Position in meters, rotation as unit quaternion
 
 ## Connection Setup
 
@@ -284,9 +377,16 @@ def handle_menu(frame: ControllerFrame):
 
 ## Output Streams
 
-- `quest.controller_left` → `ControllerData` for left hand
-- `quest.controller_right` → `ControllerData` for right hand
+### Controller Data Streams (Full VR Info)
+- `quest.controller_left` → `ControllerData` for left hand (buttons, axes, pose)
+- `quest.controller_right` → `ControllerData` for right hand (buttons, axes, pose)
 - `quest.controller_both` → `ControllerFrame` with both controllers
+
+### Pose Streams (Robot Integration)
+- `quest.controller_left_pose` → `PoseStamped` for left hand position/orientation
+- `quest.controller_right_pose` → `PoseStamped` for right hand position/orientation
+
+**Note**: PoseStamped outputs provide only position and orientation (no buttons/axes)
 
 ## Camera Streaming
 

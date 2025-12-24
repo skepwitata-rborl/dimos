@@ -29,7 +29,9 @@ from pydantic import ValidationError
 from reactivex.disposable import Disposable
 
 from dimos.core import Module, Out, rpc
+from dimos.msgs.geometry_msgs import PoseStamped
 from dimos.msgs.sensor_msgs import Image
+from ..coordinate_transform import webxr_to_ros_pose
 from ..models import ControllerData, ControllerFrame
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,8 @@ class MetaQuestModule(Module):
     controller_left: Out[ControllerData] = None
     controller_right: Out[ControllerData] = None
     controller_both: Out[ControllerFrame] = None
+    controller_left_pose: Out[PoseStamped] = None
+    controller_right_pose: Out[PoseStamped] = None
 
     def __init__(
         self,
@@ -50,6 +54,7 @@ class MetaQuestModule(Module):
         ssl_key: Optional[str] = None,
         camera_streams: Optional[dict] = None,
         jpeg_quality: int = 85,
+        transform_to_ros: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -59,6 +64,7 @@ class MetaQuestModule(Module):
         self.ssl_key = ssl_key
         self.camera_streams = camera_streams or {}
         self.jpeg_quality = jpeg_quality
+        self.transform_to_ros = transform_to_ros
 
         self._server = None
         self._running = False
@@ -176,6 +182,51 @@ class MetaQuestModule(Module):
 
             if frame.right and self.controller_right:
                 self.controller_right.publish(frame.right)
+
+            # Publish PoseStamped msg with Pose and Orientation
+            if frame.left and frame.left.connected and self.controller_left_pose:
+                # Apply coordinate transform if enabled
+                if self.transform_to_ros:
+                    ros_pos, ros_quat = webxr_to_ros_pose(
+                        frame.left.position,
+                        frame.left.rotation
+                    )
+                    left_pose = PoseStamped(
+                        ts=frame.timestamp,
+                        frame_id="vr_left_controller_ros",
+                        position=ros_pos,
+                        orientation=ros_quat,
+                    )
+                else:
+                    left_pose = PoseStamped(
+                        ts=frame.timestamp,
+                        frame_id="vr_left_controller_webxr",
+                        position=frame.left.position,
+                        orientation=frame.left.rotation,
+                    )
+                self.controller_left_pose.publish(left_pose)
+
+            if frame.right and frame.right.connected and self.controller_right_pose:
+                # Apply coordinate transform if enabled
+                if self.transform_to_ros:
+                    ros_pos, ros_quat = webxr_to_ros_pose(
+                        frame.right.position,
+                        frame.right.rotation
+                    )
+                    right_pose = PoseStamped(
+                        ts=frame.timestamp,
+                        frame_id="vr_right_controller_ros",
+                        position=ros_pos,
+                        orientation=ros_quat,
+                    )
+                else:
+                    right_pose = PoseStamped(
+                        ts=frame.timestamp,
+                        frame_id="vr_right_controller_webxr",
+                        position=frame.right.position,
+                        orientation=frame.right.rotation,
+                    )
+                self.controller_right_pose.publish(right_pose)
 
         except Exception as e:
             logger.error(f"Error publishing controller data: {e}")
