@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VR Teleoperation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #container {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #ws-status {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 16px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #0a0;
+            border-radius: 4px;
+            color: #0f0;
+            font-size: 12px;
+            z-index: 10;
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 60px;
+            left: 0;
+            right: 0;
+            padding: 20px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.9), transparent);
+            color: #0f0;
+            z-index: 10;
+        }
+
+        #ui-overlay h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        #ui-overlay p {
+            font-size: 14px;
+            color: #0a0;
+        }
+
+        #vr-button-container {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        #vr-button {
+            padding: 16px 32px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #000;
+            background: #0f0;
+            border: 2px solid #0a0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: 'Courier New', monospace;
+        }
+
+        #vr-button:hover {
+            background: #0a0;
+            transform: scale(1.05);
+        }
+
+        #vr-button:disabled {
+            background: #555;
+            border-color: #333;
+            color: #888;
+            cursor: not-allowed;
+        }
+
+        #info {
+            color: #0a0;
+            text-align: center;
+            font-size: 14px;
+            max-width: 400px;
+        }
+
+        #error {
+            padding: 12px 24px;
+            background: rgba(255, 0, 0, 0.2);
+            border: 1px solid rgba(255, 0, 0, 0.5);
+            border-radius: 8px;
+            color: #f00;
+            font-size: 14px;
+            max-width: 400px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+
+    <div id="ws-status">WebSocket: Connecting...</div>
+
+    <div id="ui-overlay">
+        <h1>VR Teleoperation</h1>
+        <p>Quest 3 controller streaming with WebSocket</p>
+    </div>
+
+    <div id="vr-button-container">
+        <button id="vr-button">Enter VR</button>
+        <div id="error"></div>
+        <div id="info">
+            <p><strong>Instructions:</strong></p>
+            <p style="margin-top: 8px;">1. Press "Enter VR" button</p>
+            <p>2. Put on your Quest 3</p>
+            <p>3. See controller data on panels</p>
+            <p style="margin-top: 8px; font-size: 12px; color: #666;">WebSocket streams data when available</p>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"
+        }
+    }
+    </script>
+
+    <script type="module" src="/static/controller.js"></script>
+</body>
+</html>

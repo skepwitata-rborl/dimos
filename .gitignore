@@ -48,3 +48,7 @@ yolo11n.pt
 
 # symlink one of .envrc.* if you'd like to use
 .envrc
+
+# VR SSL Certificates
+dimos/vr/certificates/*.pem
+dimos/vr/certificates/*.keydimos/vr/__pycache__/
