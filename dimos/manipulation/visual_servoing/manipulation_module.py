@@ -620,12 +620,11 @@ class ManipulationModule(Module):
             )
 
             # Calculate offset in world frame
-            # Transform local +X offset (1cm) to world frame using current orientation
+            # Transform local +X offset (2cm) to world frame using current orientation
             rot = Rotation.from_quat(
                 [pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
             )
 
-            # Offset 2cm in +X direction of gripper frame
             local_offset = np.array([0.02, 0.0, 0.0])
             world_offset = rot.apply(local_offset)
 
