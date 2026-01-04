@@ -40,6 +40,7 @@ from dimos.msgs.geometry_msgs import Transform
 from dimos.msgs.sensor_msgs import CameraInfo, Image
 from dimos.perception.detection.detectors.yoloe import Yoloe2DDetector, YoloePromptMode
 from dimos.perception.detection.type import ImageDetections2D
+from dimos.perception.detection.objectDB import ObjectDB
 from dimos.perception.detection.type.detection3d.object import (
     Object,
     aggregate_pointclouds,
@@ -63,11 +64,7 @@ class ObjectSceneRegistrationModule(Module):
     _camera_info: CameraInfo | None = None
     _tf_buffer: tf2_ros.Buffer | None = None
     _tf_listener: tf2_ros.TransformListener | None = None
-
-    # TODO: Re-enable once ObjectDB RPC wiring is fixed
-    # rpc_calls: list[str] = [
-    #     "ObjectDB.add_objects",
-    # ]
+    _object_db: ObjectDB | None = None
 
     def __init__(
         self,
@@ -95,6 +92,10 @@ class ObjectSceneRegistrationModule(Module):
     def start(self) -> None:
         super().start()
         self._running = True
+
+        # Initialize ObjectDB for spatial memory
+        self._object_db = ObjectDB()
+        logger.info("Initialized ObjectDB for spatial memory")
 
         # Initialize detector (uses yoloe-11l-seg-pf.pt for LRPC mode by default)
         self._detector = Yoloe2DDetector(
@@ -228,8 +229,17 @@ class ObjectSceneRegistrationModule(Module):
             self._node.destroy_node()
             self._node = None
 
+        if self._object_db:
+            self._object_db.clear()
+            self._object_db = None
+
         logger.info("ObjectSceneRegistrationModule stopped")
         super().stop()
+
+    @property
+    def object_db(self) -> ObjectDB | None:
+        """Access the ObjectDB for querying detected objects."""
+        return self._object_db
 
     def _convert_compressed_depth_image(self, msg: ROSCompressedImage) -> Image | None:
         """Convert ROS compressedDepth image to internal Image type."""
@@ -339,45 +349,37 @@ class ObjectSceneRegistrationModule(Module):
                     rclpy.time.Time(),
                     timeout=rclpy.duration.Duration(seconds=0.1),
                 )
-                Transform.from_ros_transform_stamped(ros_transform)
+                camera_transform = Transform.from_ros_transform_stamped(ros_transform)
             except (
                 tf2_ros.LookupException,
                 tf2_ros.ConnectivityException,
                 tf2_ros.ExtrapolationException,
             ):
-                pass
+                logger.warning("Failed to lookup transform from camera frame to target frame")
+                return
 
         objects = Object.from_2d(
             detections_2d=detections_2d,
             color_image=color_image,
             depth_image=depth_image,
             camera_info=self._camera_info,
-            # camera_transform=camera_transform,
+            camera_transform=camera_transform,
         )
 
         if not objects:
             return
 
-        # TODO: Re-enable ObjectDB RPC call once module wiring is fixed
-        # The RPC call blocks indefinitely if ObjectDB is not responding
-        # try:
-        #     add_objects_rpc = self.get_rpc_calls("ObjectDB.add_objects")
-        #     add_objects_rpc(objects)
-        #     logger.info("ObjectDB RPC call succeeded")
-        # except ValueError:
-        #     pass
-        # except Exception as e:
-        #     logger.warning(f"ObjectDB RPC call failed: {e}")
+        # Add objects to spatial memory database
+        if self._object_db is not None:
+            self._object_db.add_objects(objects)
 
         detections_3d = to_detection3d_array(objects)
         ros_detections_3d = detections_3d.to_ros_msg()
         self._detections_3d_pub.publish(ros_detections_3d)
 
-        aggregated_pc = aggregate_pointclouds(objects)
+        aggregated_pc = aggregate_pointclouds(self._object_db.get_objects())
         if aggregated_pc is not None:
             ros_pc = aggregated_pc.to_ros_msg()
-            # Use the frame_id from the aggregated pointcloud (already transformed)
-            ros_pc.header = header
             self._pointcloud_pub.publish(ros_pc)
 
 

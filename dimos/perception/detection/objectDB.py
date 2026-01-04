@@ -17,7 +17,6 @@ from __future__ import annotations
 import threading
 from typing import TYPE_CHECKING, Any
 
-from dimos.core import Module, rpc
 from dimos.utils.logging_config import setup_logger
 
 if TYPE_CHECKING:
@@ -27,7 +26,7 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
-class ObjectDB(Module):
+class ObjectDB:
     """Spatial memory database for 3D object detections.
 
     Maintains two tiers of objects internally:
@@ -44,7 +43,6 @@ class ObjectDB(Module):
         distance_threshold: float = 0.5,
         min_detections_for_permanent: int = 5,
     ) -> None:
-        super().__init__()
         self._distance_threshold = distance_threshold
         self._min_detections = min_detections_for_permanent
 
@@ -58,10 +56,9 @@ class ObjectDB(Module):
         self._lock = threading.RLock()
 
     # ─────────────────────────────────────────────────────────────────
-    # RPC Methods (Public Interface)
+    # Public Methods
     # ─────────────────────────────────────────────────────────────────
 
-    @rpc
     def add_objects(self, objects: list[Object]) -> list[Object]:
         """Add multiple objects to the database with deduplication.
 
@@ -77,19 +74,16 @@ class ObjectDB(Module):
             results.append(updated_obj)
         return results
 
-    @rpc
     def get_objects(self) -> list[Object]:
         """Get all permanent objects (detection_count >= threshold)."""
         with self._lock:
             return list(self._objects.values())
 
-    @rpc
     def find_by_name(self, name: str) -> list[Object]:
         """Find all permanent objects with matching name."""
         with self._lock:
             return [obj for obj in self._objects.values() if obj.name == name]
 
-    @rpc
     def find_nearest(
         self,
         position: Vector3,
@@ -116,7 +110,6 @@ class ObjectDB(Module):
 
             return min(candidates, key=lambda obj: position.distance(obj.center))
 
-    @rpc
     def clear(self) -> None:
         """Clear all objects from the database."""
         with self._lock:
@@ -125,7 +118,6 @@ class ObjectDB(Module):
             self._track_id_map.clear()
             logger.info("ObjectDB cleared")
 
-    @rpc
     def get_stats(self) -> dict[str, int]:
         """Get statistics about the database."""
         with self._lock:
@@ -265,7 +257,4 @@ class ObjectDB(Module):
             return f"ObjectDB(permanent={len(self._objects)}, pending={len(self._pending_objects)})"
 
 
-# Module blueprint for deployment
-object_db_module = ObjectDB.blueprint
-
-__all__ = ["ObjectDB", "object_db_module"]
+__all__ = ["ObjectDB"]

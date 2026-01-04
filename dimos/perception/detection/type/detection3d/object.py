@@ -71,8 +71,8 @@ class Object(Detection3D):
             and other.camera_transform is not None
         ):
             # Transform new pointcloud to world frame and add to existing
-            transformed_pc = other.pointcloud.transform(other.camera_transform)
-            self.pointcloud = self.pointcloud + transformed_pc
+            # transformed_pc = other.pointcloud.transform(other.camera_transform)
+            # self.pointcloud = self.pointcloud + transformed_pc
 
             # Recompute center from accumulated pointcloud
             pc_center = self.pointcloud.center

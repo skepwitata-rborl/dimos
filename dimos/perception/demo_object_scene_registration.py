@@ -14,10 +14,9 @@
 # limitations under the License.
 
 from dimos.core.blueprints import autoconnect
-from dimos.perception.detection.objectDB import object_db_module
 from dimos.perception.object_scene_registration import object_scene_registration_module
 
+# ObjectDB is now internal to ObjectSceneRegistrationModule (no longer a separate module)
 demo_object_scene_registration = autoconnect(
-    object_db_module(),
     object_scene_registration_module(),
 )
