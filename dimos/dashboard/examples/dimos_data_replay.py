@@ -98,6 +98,9 @@ class Dashboard(Module):
 
         host = "127.0.0.1"
         port = 4000
+        print(
+            f"Dashboard running at http://localhost:4000 (Rerun gRPC on port {rerun_info['grpc_port']})"
+        )
         server = HTTPServer((host, port), Handler)
         threading.Thread(target=server.serve_forever, name="dashboard-server", daemon=True).start()
 
@@ -161,7 +164,7 @@ blueprint = (
             ("lidar", LidarMessage): pLCMTransport("/replay/lidar"),
         }
     )
-    .global_config(n_dask_workers=2)
+    .global_config(n_dask_workers=1, threads_per_worker=4)
 )
 
 
