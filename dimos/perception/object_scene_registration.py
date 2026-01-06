@@ -417,10 +417,12 @@ class ObjectSceneRegistrationModule(Module):
 
                                 if should_log:
                                     try:
+                                        logger.info(f"[Rerun] Attempting to log mesh for {obj.object_id}")
                                         self._log_mesh_to_rerun(obj)
-                                    except Exception:
-                                        logger.debug(
-                                            "Failed to log mesh to Rerun (ignored)", exc_info=True
+                                        logger.info(f"[Rerun] Successfully logged mesh for {obj.object_id}")
+                                    except Exception as e:
+                                        logger.error(
+                                            f"Failed to log mesh {obj.object_id} to Rerun: {e}", exc_info=True
                                         )
                 self._mesh_request_states[object_id] = "DONE"
                 logger.info(f"Mesh complete for object_id={object_id}")
@@ -973,16 +975,27 @@ class ObjectSceneRegistrationModule(Module):
         import rerun as rr  # type: ignore[import-not-found]
         import trimesh  # type: ignore[import-untyped]
 
-        if not obj.mesh_path or not Path(obj.mesh_path).exists():
+        logger.info(f"[Rerun] _log_mesh_to_rerun called for {obj.object_id}, mesh_path={obj.mesh_path}")
+
+        if not obj.mesh_path:
+            logger.warning(f"[Rerun] No mesh_path for {obj.object_id}")
+            return
+        
+        if not Path(obj.mesh_path).exists():
+            logger.warning(f"[Rerun] Mesh file does not exist: {obj.mesh_path}")
             return
 
         # Load mesh (trimesh handles OBJ with vertex colors)
+        logger.info(f"[Rerun] Loading mesh from {obj.mesh_path}")
         mesh = trimesh.load(obj.mesh_path)
+        logger.info(f"[Rerun] Mesh loaded: {len(mesh.vertices)} vertices, {len(mesh.faces)} faces")
 
         # Extract vertex colors (Rerun native support!)
         try:
             vertex_colors = mesh.visual.to_color().vertex_colors
-        except Exception:
+            logger.info(f"[Rerun] Extracted vertex colors: shape={vertex_colors.shape if vertex_colors is not None else None}")
+        except Exception as e:
+            logger.warning(f"[Rerun] Failed to extract vertex colors: {e}")
             vertex_colors = None
 
         # Prepare pose
@@ -993,14 +1006,19 @@ class ObjectSceneRegistrationModule(Module):
 
             quat_xyzw = list(obj.fp_world_orientation)  # already in xyzw order
             rot_matrix = R.from_quat(quat_xyzw).as_matrix()
+            logger.info(f"[Rerun] Using fp_world pose: trans={translation}, quat={quat_xyzw}")
         elif obj.center is not None:
             translation = [float(obj.center.x), float(obj.center.y), float(obj.center.z)]
             rot_matrix = np.eye(3, dtype=np.float32)
+            logger.info(f"[Rerun] Using center pose: trans={translation}")
         else:
+            logger.warning(f"[Rerun] No pose available for {obj.object_id}")
             return
 
         # Log mesh geometry + pose (ARKit Scenes pattern)
         entity_path = f"/world/perception/objects/{obj.object_id}"
+        logger.info(f"[Rerun] Logging to entity path: {entity_path}")
+        
         self._rr_log(
             entity_path,
             rr.Mesh3D(
@@ -1011,6 +1029,8 @@ class ObjectSceneRegistrationModule(Module):
             ),
             static=True,
         )
+        logger.info(f"[Rerun] Logged Mesh3D for {obj.object_id}")
+        
         self._rr_log(
             entity_path,
             rr.InstancePoses3D(
@@ -1019,8 +1039,9 @@ class ObjectSceneRegistrationModule(Module):
             ),
             static=True,
         )
+        logger.info(f"[Rerun] Logged InstancePoses3D for {obj.object_id}")
 
-        logger.debug(f"[Rerun] Logged mesh for {obj.object_id} with vertex colors")
+        logger.info(f"[Rerun] ✓ Successfully logged complete mesh for {obj.object_id} with vertex colors")
 
 
 object_scene_registration_module = ObjectSceneRegistrationModule.blueprint
