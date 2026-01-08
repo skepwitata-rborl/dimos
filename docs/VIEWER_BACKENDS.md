@@ -130,7 +130,7 @@ Rerun has two “spaces” you’re always juggling:
 - **Transform frames**: names like `base_link`, `camera_optical` (how motion is defined).
 
 In DimOS on `dev`:
-- TF frames come from the TF system (`Transform.frame_id` / `Transform.child_frame_id`) and are logged via [`Transform.to_rerun()`](../dimos/msgs/geometry_msgs/Transform.py).
+- TF frames come from the TF system (`Transform.frame_id` / `Transform.child_frame_id`) and are logged via `Transform.to_rerun()` (see [`dimos/msgs/geometry_msgs/Transform.py`](/dimos/msgs/geometry_msgs/Transform.py)).
 - Visualization entity paths should be treated as **semantic organization** (`world/**`, `metrics/**`, etc).
 
 **Rule of thumb**:
