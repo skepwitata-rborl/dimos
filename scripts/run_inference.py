@@ -127,6 +127,7 @@ def run_inference():
         print(f"Setting joint positions: {action[:7]} and gripper position: {gripper_xarm}")
         joint_positions_rad = np.deg2rad(action[:7]).tolist()
         joint_cmd_pub.broadcast(None, JointCommand(joint_positions_rad))
+        # IT'S NOT SENDING COMMANDS TO THE ROBOT :((
 
         time.sleep(.2)
 
