@@ -90,6 +90,7 @@ def phase0():
     logo.stop()
     p.clear_screen()
 
+    p.header("First Phase: Feature Selection")
     # ask user project question up front
     project_dir = get_project_directory()
     if installer_status.get("template_repo"):
@@ -99,7 +100,6 @@ def phase0():
 
     optional = PROJECT_TOML["project"].get("optional-dependencies", {})
     features = [f for f in optional.keys() if f not in ["cpu"]]
-    p.header("First Phase: Feature Selection")
     selected_features = p.pick_many(
         "Which features do you want? (Pick any number of features)", options=["basics", *features]
     )
