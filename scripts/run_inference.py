@@ -29,6 +29,7 @@ ACTION_HORIZON = 15
 ACTION_CHUNK = None
 GRIPPER_CHUNK = None
 
+
 def get_camera_image(timeout: float = 5.0, topic: str = "/camera/color") -> np.ndarray:
     event = threading.Event()
     image_data: dict[str, np.ndarray] = {}
@@ -72,12 +73,13 @@ def get_xarm_joint_positions(timeout: float = 5.0, topic: str = "/xarm/joint_sta
 
 def get_observation():
     return {
-        "observation/exterior_image_1_left": get_camera_image(), # ADD SECOND CAMERA IN BLUEPRINT DEFINED WITH SERIAL NUMBER
+        "observation/exterior_image_1_left": get_camera_image(),  # ADD SECOND CAMERA IN BLUEPRINT DEFINED WITH SERIAL NUMBER
         "observation/wrist_image_left": get_camera_image(),
         "observation/joint_position": get_xarm_joint_positions(),
         "observation/gripper_position": 0.0,
         "prompt": "move the arm slightly to the left",
     }
+
 
 def franka_to_xarm(franka_joint_positions):
     offsets = np.array([0, 0, 0, 180, 0, 180, 0])
@@ -122,6 +124,7 @@ def run_inference():
         print(f"Setting joint positions: {action[:7]} and gripper position: {gripper_xarm}")
         arm.set_servo_angle(angle=action[:7], speed=10, wait=False)
         # arm.set_gripper_position(pos=gripper_xarm, speed=50, wait=False)
+
 
 if __name__ == "__main__":
     # connect to policy server
