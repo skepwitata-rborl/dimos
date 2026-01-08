@@ -23,6 +23,8 @@ from ..support import prompt_tools as p
 from ..support.bundled_data import PROJECT_TOML
 from ..support.constants import PLACEHOLDERS
 from ..support.dimos_banner import RenderLogo
+from ..support.direnv import setup_direnv
+from ..support.dotenv import setup_dotenv
 from ..support.get_system_analysis import get_system_analysis
 from ..support.installer_status import installer_status
 from ..support.misc import (
@@ -33,8 +35,6 @@ from ..support.misc import (
 from ..support.setup_docker_env import setup_docker_env
 from ..support.setup_nix import ensure_flakes_enabled, nix_install, setup_nix_flake
 from ..support.shell_tooling import command_exists, run_command
-from ..support.dotenv import setup_dotenv
-from ..support.direnv import setup_direnv
 
 home = Path(expanduser("~"))
 dimos_cache = home / ".cache" / "dimos"
@@ -54,7 +54,7 @@ def phase0(cli_features: list[str] | None = None) -> tuple[dict[str, object], li
         wave_freq=0.01,  # smaller = longer streaks of color
         scrollable=True,
     )
-    
+
     #
     # system analysis
     #
@@ -91,9 +91,9 @@ def phase0(cli_features: list[str] | None = None) -> tuple[dict[str, object], li
     logo.stop()
     p.clear_screen()
 
-    # 
+    #
     # question 1: in a project directory?
-    # 
+    #
     p.header("First Phase: Feature Selection")
     # ask user project question up front
     project_dir = get_project_directory()
@@ -102,11 +102,11 @@ def phase0(cli_features: list[str] | None = None) -> tuple[dict[str, object], li
         # fill out the directory
         replace_strings_in_directory(project_dir, PLACEHOLDERS, project_name)
 
-    # 
+    #
     # question 2: which dimos features?
-    # 
+    #
     selected_features = []
-    if cli_features == None:
+    if cli_features is None:
         optional = PROJECT_TOML["project"].get("optional-dependencies", {})
         features = [f for f in optional.keys() if f not in ["cpu"]]
         selected_features = p.pick_many(
@@ -116,10 +116,10 @@ def phase0(cli_features: list[str] | None = None) -> tuple[dict[str, object], li
         selected_features = [each for each in selected_features if each != "basics"]
         if "sim" in selected_features and "cuda" not in selected_features:
             selected_features.append("cpu")
-    
-    # 
+
+    #
     # question 3: setup .env and .envrc?
-    # 
+    #
     env_path = f"{project_dir}/.env"
     envrc_path = f"{project_dir}/.envrc"
     has_dotenv = setup_dotenv(project_dir, env_path)

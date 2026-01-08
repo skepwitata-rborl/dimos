@@ -27,7 +27,8 @@ from .phases.phase04_dimos_check import phase4
 from .support.bundled_data import PROJECT_TOML
 from .support.get_system_analysis import get_system_analysis
 from .support.installer_status import installer_status
-from .support.prompt_tools import green, cyan
+from .support.prompt_tools import cyan, green
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     epilog = textwrap.dedent(

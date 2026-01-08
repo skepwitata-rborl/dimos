@@ -37,8 +37,8 @@ def setup_direnv(envrc_path: str | Path) -> bool:
 
     envrc_exists = envrc_path.is_file()
     envrc_text = envrc_path.read_text() if envrc_exists else ""
-    
-    didnt_have_file = not envrc_exists 
+
+    didnt_have_file = not envrc_exists
     is_template_repo = installer_status.get("template_repo")
     add_activation = False
     if didnt_have_file:
@@ -91,7 +91,7 @@ def setup_direnv(envrc_path: str | Path) -> bool:
 
     if didnt_have_file:
         p.sub_header(f"- Don't forget to call {p.highlight('direnv allow')} to enable the .envrc!")
-    
+
     return True
 
 
