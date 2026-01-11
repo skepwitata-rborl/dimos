@@ -106,6 +106,11 @@ class TickLoop:
         """Number of ticks since start."""
         return self._tick_count
 
+    @property
+    def is_running(self) -> bool:
+        """Whether the tick loop is currently running."""
+        return self._running
+
     def start(self) -> None:
         """Start the tick loop in a daemon thread."""
         if self._running:
@@ -143,10 +148,11 @@ class TickLoop:
             except Exception as e:
                 logger.error(f"TickLoop tick error: {e}")
 
-            # Rate control
-            elapsed = time.perf_counter() - tick_start
-            if elapsed < period:
-                time.sleep(period - elapsed)
+            # Rate control - recalculate sleep time to account for overhead
+            next_tick_time = tick_start + period
+            sleep_time = next_tick_time - time.perf_counter()
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 
     def _tick(self) -> None:
         """Single tick: read → compute → arbitrate → route → write."""

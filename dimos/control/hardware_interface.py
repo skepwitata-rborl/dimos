@@ -190,7 +190,7 @@ class BackendHardwareInterface:
             return self._backend.write_joint_velocities(ordered)
         elif mode == ControlMode.TORQUE:
             # Most backends don't support torque mode
-            # Log and return False rather than silently ignoring
+            logger.warning(f"Hardware {self._hardware_id} does not support torque mode")
             return False
         else:
             return False

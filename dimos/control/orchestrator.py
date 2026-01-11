@@ -305,9 +305,24 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
                 return False
 
             interface = self._hardware[hardware_id]
+            hw_joints = set(interface.joint_names)
+
+            with self._task_lock:
+                for task in self._tasks.values():
+                    if task.is_active():
+                        claimed_joints = task.claim().joints
+                        overlap = hw_joints & claimed_joints
+                        if overlap:
+                            logger.error(
+                                f"Cannot remove hardware {hardware_id}: "
+                                f"task '{task.name}' is actively using joints {overlap}"
+                            )
+                            return False
+
             for joint_name in interface.joint_names:
                 del self._joint_to_hardware[joint_name]
 
+            interface.disconnect()
             del self._hardware[hardware_id]
             logger.info(f"Removed hardware {hardware_id}")
             return True
@@ -445,7 +460,7 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
     @rpc
     def start(self) -> None:
         """Start the orchestrator control loop."""
-        if self._tick_loop and self._tick_loop.tick_count > 0:
+        if self._tick_loop and self._tick_loop.is_running:
             logger.warning("Orchestrator already running")
             return
 
