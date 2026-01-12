@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Generator
 from contextlib import contextmanager
 import os
 from pathlib import Path
@@ -49,6 +50,12 @@ class SAM2InferenceState(TypedDict):
 
 
 class EdgeTAMProcessor(Detector):
+    _predictor: "SAM2VideoPredictor"
+    _inference_state: SAM2InferenceState | None
+    _frame_count: int
+    _is_tracking: bool
+    _buffer_size: int
+
     def __init__(
         self,
     ) -> None:
@@ -79,7 +86,7 @@ class EdgeTAMProcessor(Detector):
             )
             cfg.model._target_ = "sam2.sam2_video_predictor.SAM2VideoPredictor"
 
-        self._predictor: SAM2VideoPredictor = instantiate(cfg.model, _recursive_=True)
+        self._predictor = instantiate(cfg.model, _recursive_=True)
 
         ckpt_path = str(get_data("models_edgetam") / "edgetam.pt")
 
@@ -93,7 +100,7 @@ class EdgeTAMProcessor(Detector):
         self._predictor = self._predictor.to("cuda")
         self._predictor.eval()
 
-        self._inference_state: SAM2InferenceState | None = None
+        self._inference_state = None
         self._frame_count = 0
         self._is_tracking = False
         self._buffer_size = 100  # Keep last N frames in memory to avoid OOM
@@ -251,7 +258,7 @@ class EdgeTAMProcessor(Detector):
 
 
 @contextmanager
-def _temp_dir_context(image: Image):
+def _temp_dir_context(image: Image) -> Generator[str, None, None]:
     path = tempfile.mkdtemp()
 
     image.save(f"{path}/00000.jpg")
