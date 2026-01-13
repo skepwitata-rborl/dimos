@@ -108,39 +108,46 @@ class XArmSimBridge(MujocoSimBridgeBase):
             if self._velocity_control:
                 # Integrate velocity targets to position targets for MuJoCo control
                 dt = 1.0 / self._control_frequency
+                n_act = min(self._num_joints, self._model.nu)
+                n_q = min(self._num_joints, self._model.nq)
                 with self._lock:
-                    for i in range(self._num_joints):
-                        if i < self._model.nu:
-                            if abs(vel_targets[i]) < VELOCITY_STOP_THRESHOLD:
-                                # When stopped, hold current position to prevent drift
-                                if i < self._model.nq:
-                                    self._velocity_control_positions[i] = self._hold_positions[i]
-                            else:
-                                # Integrate: position += velocity * dt
-                                self._velocity_control_positions[i] += vel_targets[i] * dt
-                                self._hold_positions[i] = self._velocity_control_positions[i]
-                            self._data.ctrl[i] = self._velocity_control_positions[i]
+                    for i in range(n_act):
+                        if abs(vel_targets[i]) < VELOCITY_STOP_THRESHOLD:
+                            # When stopped, hold current position to prevent drift
+                            if i < n_q:
+                                self._velocity_control_positions[i] = self._hold_positions[i]
+                        else:
+                            # Integrate: position += velocity * dt
+                            self._velocity_control_positions[i] += vel_targets[i] * dt
+                            self._hold_positions[i] = self._velocity_control_positions[i]
+                        self._data.ctrl[i] = self._velocity_control_positions[i]
             else:
                 # Direct position control
+                n_act = min(self._num_joints, self._model.nu)
                 with self._lock:
-                    for i in range(self._num_joints):
-                        if i < self._model.nu:
-                            self._data.ctrl[i] = pos_targets[i]
-                    self._hold_positions = list(pos_targets)
+                    for i in range(n_act):
+                        self._data.ctrl[i] = pos_targets[i]
+                    self._hold_positions[:n_act] = pos_targets[:n_act]
 
     def _update_joint_state(self) -> None:
         """Update internal joint state from MuJoCo simulation."""
         with self._lock:
-            for i in range(self._num_joints):
-                if i < self._model.nq:  # no of generalized coordinates
-                    self._joint_positions[i] = float(self._data.qpos[i])
-                if i < self._model.nv:  # no of generalized velocities
-                    self._joint_velocities[i] = float(self._data.qvel[i])
-                # Efforts from actuators
-                if i < self._model.nu:  # no of actuators
-                    self._joint_efforts[i] = float(
-                        self._data.qfrc_actuator[i] if i < len(self._data.qfrc_actuator) else 0.0
-                    )
+            n_q = min(self._num_joints, self._model.nq)
+            n_v = min(self._num_joints, self._model.nv)
+            n_act = min(self._num_joints, self._model.nu)
+
+            for i in range(n_q):
+                self._joint_positions[i] = float(self._data.qpos[i])
+            for i in range(n_v):
+                self._joint_velocities[i] = float(self._data.qvel[i])
+
+            if n_act:
+                qfrc = self._data.qfrc_actuator
+                n_eff = min(n_act, len(qfrc))
+                for i in range(n_eff):
+                    self._joint_efforts[i] = float(qfrc[i])
+                for i in range(n_eff, n_act):
+                    self._joint_efforts[i] = 0.0
 
     # ------------------------------------------------------------------ #
     # Properties (matching XArmAPI interface)
