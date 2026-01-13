@@ -24,6 +24,7 @@ from typing import Any
 from dimos.hardware.manipulators.spec import (
     ControlMode,
     JointLimits,
+    ManipulatorBackend,
     ManipulatorInfo,
 )
 
@@ -500,5 +501,8 @@ class PiperBackend:
         """
         return None
 
+
+# Static type check: verify PiperBackend implements ManipulatorBackend protocol
+_: type[ManipulatorBackend] = PiperBackend
 
 __all__ = ["PiperBackend"]

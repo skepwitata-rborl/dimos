@@ -24,6 +24,7 @@ from xarm.wrapper import XArmAPI
 from dimos.hardware.manipulators.spec import (
     ControlMode,
     JointLimits,
+    ManipulatorBackend,
     ManipulatorInfo,
 )
 
@@ -387,5 +388,8 @@ class XArmBackend:
             return list(ft)
         return None
 
+
+# Static type check: verify XArmBackend implements ManipulatorBackend protocol
+_: type[ManipulatorBackend] = XArmBackend
 
 __all__ = ["XArmBackend"]
