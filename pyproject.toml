@@ -188,7 +188,7 @@ manipulation = [
     # lerobot so101 arm
     "lerobot",
     "lerobot[feetech]",
-    "lerobot[manipulation]",
+    "lerobot[kinematics]",
 
     # Visualization (Optional)
     "kaleido>=0.2.1",
