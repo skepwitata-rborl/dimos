@@ -49,6 +49,9 @@ class GlobalConfig(BaseSettings):
     # - data/mujoco_sim/{mujoco_profile}.xml
     # - data/mujoco_sim/{mujoco_profile}_policy.onnx
     mujoco_profile: str | None = None
+    # Enable lightweight timing breakdown logs from the MuJoCo subprocess (physics/render/pcd/policy).
+    mujoco_profiler: bool = False
+    mujoco_profiler_interval_s: float = 2.0
     robot_width: float = 0.3
     robot_rotation_diameter: float = 0.6
     planner_strategy: NavigationStrategy = "simple"

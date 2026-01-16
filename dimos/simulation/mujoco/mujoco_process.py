@@ -133,6 +133,22 @@ def _run_simulation(config: GlobalConfig, shm: ShmReader) -> None:
 
     shm.signal_ready()
 
+    # Lightweight profiler: log rolling averages of time spent in the MuJoCo subprocess.
+    # Includes physics stepping, rendering, pointcloud conversion, SHM writes, and policy inference.
+    profiler_enabled = bool(getattr(config, "mujoco_profiler", False))
+    profiler_interval_s = float(getattr(config, "mujoco_profiler_interval_s", 2.0))
+    if profiler_enabled:
+        from dimos.simulation.mujoco import policy as mujoco_policy
+
+        mujoco_policy.set_mujoco_profiler_enabled(True)
+        logger.info(
+            "MuJoCo profiler enabled",
+            interval_s=profiler_interval_s,
+            video_fps=VIDEO_FPS,
+            lidar_fps=LIDAR_FPS,
+            steps_per_frame=config.mujoco_steps_per_frame,
+        )
+
     with viewer.launch_passive(model, data, show_left_ui=False, show_right_ui=False) as m_viewer:
         camera_size = (VIDEO_WIDTH, VIDEO_HEIGHT)
 
@@ -160,32 +176,57 @@ def _run_simulation(config: GlobalConfig, shm: ShmReader) -> None:
         m_viewer.cam.azimuth = config.mujoco_camera_position_float[4]
         m_viewer.cam.elevation = config.mujoco_camera_position_float[5]
 
+        # Profiler accumulators (seconds).
+        acc_frames = 0
+        acc_step_s = 0.0
+        acc_sync_s = 0.0
+        acc_odom_s = 0.0
+        acc_rgb_render_s = 0.0
+        acc_rgb_shm_s = 0.0
+        acc_depth_render_s = 0.0
+        acc_depth_shm_s = 0.0
+        acc_pcd_s = 0.0
+        acc_lidar_shm_s = 0.0
+        next_report_t = time.perf_counter() + profiler_interval_s
+
         while m_viewer.is_running() and not shm.should_stop():
             step_start = time.time()
+            t_frame0 = time.perf_counter()
 
             # Step simulation
+            t0 = time.perf_counter()
             for _ in range(config.mujoco_steps_per_frame):
                 mujoco.mj_step(model, data)
+            acc_step_s += time.perf_counter() - t0
 
+            t0 = time.perf_counter()
             m_viewer.sync()
+            acc_sync_s += time.perf_counter() - t0
 
             # Always update odometry
+            t0 = time.perf_counter()
             pos = data.qpos[0:3].copy()
             quat = data.qpos[3:7].copy()  # (w, x, y, z)
             shm.write_odom(pos, quat, time.time())
+            acc_odom_s += time.perf_counter() - t0
 
             current_time = time.time()
 
             # Video rendering
             if current_time - last_video_time >= video_interval:
+                t0 = time.perf_counter()
                 rgb_renderer.update_scene(data, camera=camera_id, scene_option=scene_option)
                 pixels = rgb_renderer.render()
+                acc_rgb_render_s += time.perf_counter() - t0
+                t0 = time.perf_counter()
                 shm.write_video(pixels)
+                acc_rgb_shm_s += time.perf_counter() - t0
                 last_video_time = current_time
 
             # Lidar/depth rendering
             if current_time - last_lidar_time >= lidar_interval:
                 # Render all depth cameras
+                t0 = time.perf_counter()
                 depth_renderer.update_scene(data, camera=lidar_camera_id, scene_option=scene_option)
                 depth_front = depth_renderer.render()
 
@@ -198,10 +239,14 @@ def _run_simulation(config: GlobalConfig, shm: ShmReader) -> None:
                     data, camera=lidar_right_camera_id, scene_option=scene_option
                 )
                 depth_right = depth_right_renderer.render()
+                acc_depth_render_s += time.perf_counter() - t0
 
+                t0 = time.perf_counter()
                 shm.write_depth(depth_front, depth_left, depth_right)
+                acc_depth_shm_s += time.perf_counter() - t0
 
                 # Process depth images into lidar message
+                t0 = time.perf_counter()
                 all_points = []
                 cameras_data = [
                     (
@@ -240,7 +285,12 @@ def _run_simulation(config: GlobalConfig, shm: ShmReader) -> None:
                         origin=Vector3(pos[0], pos[1], pos[2]),
                         resolution=LIDAR_RESOLUTION,
                     )
+                    acc_pcd_s += time.perf_counter() - t0
+                    t0 = time.perf_counter()
                     shm.write_lidar(lidar_msg)
+                    acc_lidar_shm_s += time.perf_counter() - t0
+                else:
+                    acc_pcd_s += time.perf_counter() - t0
 
                 last_lidar_time = current_time
 
@@ -248,6 +298,51 @@ def _run_simulation(config: GlobalConfig, shm: ShmReader) -> None:
             time_until_next_step = model.opt.timestep - (time.time() - step_start)
             if time_until_next_step > 0:
                 time.sleep(time_until_next_step)
+
+            if profiler_enabled:
+                acc_frames += 1
+                now = time.perf_counter()
+                if now >= next_report_t:
+                    from dimos.simulation.mujoco import policy as mujoco_policy
+
+                    pol = mujoco_policy.get_mujoco_profiler_and_reset()
+                    calls = int(pol.get("control_calls", 0))
+                    ctrl_ms = (float(pol.get("control_total_s", 0.0)) * 1000.0) / max(calls, 1)
+                    obs_ms = (float(pol.get("obs_total_s", 0.0)) * 1000.0) / max(calls, 1)
+                    onnx_ms = (float(pol.get("onnx_total_s", 0.0)) * 1000.0) / max(calls, 1)
+
+                    def per_frame_ms(total_s: float) -> float:
+                        return (total_s * 1000.0) / max(acc_frames, 1)
+
+                    logger.info(
+                        "MuJoCo perf (avg ms/frame)",
+                        frames=acc_frames,
+                        physics_ms=per_frame_ms(acc_step_s),
+                        viewer_sync_ms=per_frame_ms(acc_sync_s),
+                        odom_ms=per_frame_ms(acc_odom_s),
+                        rgb_render_ms=per_frame_ms(acc_rgb_render_s),
+                        rgb_shm_ms=per_frame_ms(acc_rgb_shm_s),
+                        depth_render_ms=per_frame_ms(acc_depth_render_s),
+                        depth_shm_ms=per_frame_ms(acc_depth_shm_s),
+                        pcd_ms=per_frame_ms(acc_pcd_s),
+                        lidar_shm_ms=per_frame_ms(acc_lidar_shm_s),
+                        ctrl_calls=calls,
+                        ctrl_total_ms_per_call=ctrl_ms,
+                        ctrl_obs_ms_per_call=obs_ms,
+                        ctrl_onnx_ms_per_call=onnx_ms,
+                    )
+
+                    acc_frames = 0
+                    acc_step_s = 0.0
+                    acc_sync_s = 0.0
+                    acc_odom_s = 0.0
+                    acc_rgb_render_s = 0.0
+                    acc_rgb_shm_s = 0.0
+                    acc_depth_render_s = 0.0
+                    acc_depth_shm_s = 0.0
+                    acc_pcd_s = 0.0
+                    acc_lidar_shm_s = 0.0
+                    next_report_t = now + profiler_interval_s
 
 
 if __name__ == "__main__":

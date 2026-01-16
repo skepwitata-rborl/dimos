@@ -18,11 +18,38 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+import time
 import mujoco
 import numpy as np
 import onnxruntime as rt  # type: ignore[import-untyped]
 
 from dimos.simulation.mujoco.input_controller import InputController
+
+
+_MUJOCO_PROFILER_ENABLED = False
+_MUJOCO_PROF: dict[str, float | int] = {
+    "control_calls": 0,
+    "control_total_s": 0.0,
+    "obs_total_s": 0.0,
+    "onnx_total_s": 0.0,
+}
+
+
+def set_mujoco_profiler_enabled(enabled: bool) -> None:
+    global _MUJOCO_PROFILER_ENABLED
+    _MUJOCO_PROFILER_ENABLED = enabled
+
+
+def get_mujoco_profiler_and_reset() -> dict[str, float | int]:
+    global _MUJOCO_PROF
+    out = dict(_MUJOCO_PROF)
+    _MUJOCO_PROF = {
+        "control_calls": 0,
+        "control_total_s": 0.0,
+        "obs_total_s": 0.0,
+        "onnx_total_s": 0.0,
+    }
+    return out
 
 
 def _parse_csv_floats(s: str) -> np.ndarray[Any, Any]:
@@ -75,7 +102,26 @@ class OnnxController(ABC):
 
     def get_control(self, model: mujoco.MjModel, data: mujoco.MjData) -> None:
         self._counter += 1
-        if self._counter % self._n_substeps == 0:
+        if self._counter % self._n_substeps != 0:
+            return
+
+        if _MUJOCO_PROFILER_ENABLED:
+            t0 = time.perf_counter()
+            obs = self.get_obs(model, data)
+            t_obs = time.perf_counter()
+            onnx_input = {"obs": obs.reshape(1, -1)}
+            onnx_pred = self._policy.run(self._output_names, onnx_input)[0][0]
+            t_onnx = time.perf_counter()
+            self._last_action = onnx_pred.copy()
+            data.ctrl[:] = onnx_pred * self._action_scale + self._default_angles
+            self._post_control_update()
+            t1 = time.perf_counter()
+
+            _MUJOCO_PROF["control_calls"] = int(_MUJOCO_PROF["control_calls"]) + 1
+            _MUJOCO_PROF["control_total_s"] = float(_MUJOCO_PROF["control_total_s"]) + (t1 - t0)
+            _MUJOCO_PROF["obs_total_s"] = float(_MUJOCO_PROF["obs_total_s"]) + (t_obs - t0)
+            _MUJOCO_PROF["onnx_total_s"] = float(_MUJOCO_PROF["onnx_total_s"]) + (t_onnx - t_obs)
+        else:
             obs = self.get_obs(model, data)
             onnx_input = {"obs": obs.reshape(1, -1)}
             onnx_pred = self._policy.run(self._output_names, onnx_input)[0][0]
@@ -301,21 +347,51 @@ class MjlabVelocityOnnxController(OnnxController):
         if self._counter % self._n_substeps != 0:
             return
 
-        self._ensure_mappings(model)
-        assert self._ctrl_policy_idx is not None
-        assert self._default_joint_pos_policy is not None
-        assert self._action_scale_policy is not None
+        if _MUJOCO_PROFILER_ENABLED:
+            t0 = time.perf_counter()
 
-        obs = self.get_obs(model, data)
-        onnx_input = {"obs": obs.reshape(1, -1)}
-        onnx_pred = self._policy.run(self._output_names, onnx_input)[0][0].astype(np.float32)
+            self._ensure_mappings(model)
+            assert self._ctrl_policy_idx is not None
+            assert self._default_joint_pos_policy is not None
+            assert self._action_scale_policy is not None
 
-        # Store last action in MJLab policy order (for next observation).
-        self._last_action = onnx_pred.copy()
+            obs = self.get_obs(model, data)
+            t_obs = time.perf_counter()
+            onnx_input = {"obs": obs.reshape(1, -1)}
+            onnx_pred = self._policy.run(self._output_names, onnx_input)[0][0].astype(np.float32)
+            t_onnx = time.perf_counter()
 
-        # Apply control in MuJoCo actuator order.
-        idx = self._ctrl_policy_idx
-        targets = (
-            self._default_joint_pos_policy[idx] + onnx_pred[idx] * self._action_scale_policy[idx]
-        )
-        data.ctrl[:] = targets
+            # Store last action in MJLab policy order (for next observation).
+            self._last_action = onnx_pred.copy()
+
+            # Apply control in MuJoCo actuator order.
+            idx = self._ctrl_policy_idx
+            targets = (
+                self._default_joint_pos_policy[idx] + onnx_pred[idx] * self._action_scale_policy[idx]
+            )
+            data.ctrl[:] = targets
+            t1 = time.perf_counter()
+
+            _MUJOCO_PROF["control_calls"] = int(_MUJOCO_PROF["control_calls"]) + 1
+            _MUJOCO_PROF["control_total_s"] = float(_MUJOCO_PROF["control_total_s"]) + (t1 - t0)
+            _MUJOCO_PROF["obs_total_s"] = float(_MUJOCO_PROF["obs_total_s"]) + (t_obs - t0)
+            _MUJOCO_PROF["onnx_total_s"] = float(_MUJOCO_PROF["onnx_total_s"]) + (t_onnx - t_obs)
+        else:
+            self._ensure_mappings(model)
+            assert self._ctrl_policy_idx is not None
+            assert self._default_joint_pos_policy is not None
+            assert self._action_scale_policy is not None
+
+            obs = self.get_obs(model, data)
+            onnx_input = {"obs": obs.reshape(1, -1)}
+            onnx_pred = self._policy.run(self._output_names, onnx_input)[0][0].astype(np.float32)
+
+            # Store last action in MJLab policy order (for next observation).
+            self._last_action = onnx_pred.copy()
+
+            # Apply control in MuJoCo actuator order.
+            idx = self._ctrl_policy_idx
+            targets = (
+                self._default_joint_pos_policy[idx] + onnx_pred[idx] * self._action_scale_policy[idx]
+            )
+            data.ctrl[:] = targets
