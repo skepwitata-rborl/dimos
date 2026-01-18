@@ -137,19 +137,19 @@ If you are doing this periodically as a part of a processing loop, it is very li
         quality_barrier(lambda x: x["quality"], target_frequency=0.2),
 
         # converts Image into Person detections
-        ops.map(detect_person)
+        ops.map(detect_person),
 
         # converts Detection2D to Twist pointing in the direction of a detection
-        ops.map(detection2d_to_twist)
+        ops.map(detection2d_to_twist),
 
         # emits the latest value every 50ms making our control loop run at 20hz
-        # despire detections running at 200ms
+        # despite detections running at 200ms
         ops.sample(0.05),
     ).subscribe(self.twist.publish) # shoots off the Twist out of the module
 ```
 
 
-If you'd still like to switch to synchronious fetching from streams, we provide two approaches, getter_hot and getter_cold:
+If you'd still like to switch to synchronous fetching, we provide two approaches, `getter_hot()` and `getter_cold()`
 
 |                  | `getter_hot()`                 | `getter_cold()`                  |
 |------------------|--------------------------------|----------------------------------|
