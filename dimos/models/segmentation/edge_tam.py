@@ -36,7 +36,7 @@ from dimos.utils.data import get_data
 from dimos.utils.logging_config import setup_logger
 
 if TYPE_CHECKING:
-    from sam2.sam2_video_predictor import SAM2VideoPredictor
+    from sam2.sam2_video_predictor import SAM2VideoPredictor  # type: ignore[import-untyped]
 
 os.environ['TQDM_DISABLE'] = '1'
 

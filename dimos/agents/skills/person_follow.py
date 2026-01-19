@@ -61,7 +61,7 @@ class PersonFollowSkillContainer(SkillModule):
         self,
         camera_info: CameraInfo,
         global_config: GlobalConfig,
-        use_3d_navigation: bool = True,
+        use_3d_navigation: bool = False,
     ) -> None:
         super().__init__()
         self._global_config: GlobalConfig = global_config

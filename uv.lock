@@ -1526,7 +1526,7 @@ manipulation = [
 misc = [
     { name = "catkin-pkg" },
     { name = "cerebras-cloud-sdk" },
-    { name = "edgetam" },
+    { name = "edgetam-dimos" },
     { name = "einops" },
     { name = "empy" },
     { name = "gdown" },
@@ -1624,7 +1624,7 @@ requires-dist = [
     { name = "dimos", extras = ["agents", "web", "perception", "visualization", "sim"], marker = "extra == 'base'" },
     { name = "dimos", extras = ["base"], marker = "extra == 'unitree'" },
     { name = "dimos-lcm" },
-    { name = "edgetam", marker = "extra == 'misc'", git = "https://github.com/facebookresearch/EdgeTAM.git" },
+    { name = "edgetam-dimos", marker = "extra == 'misc'" },
     { name = "einops", marker = "extra == 'misc'", specifier = "==0.8.1" },
     { name = "empy", marker = "extra == 'misc'", specifier = "==3.3.4" },
     { name = "fastapi", marker = "extra == 'web'", specifier = ">=0.115.6" },
@@ -1842,9 +1842,9 @@ wheels = [
 ]
 
 [[package]]
-name = "edgetam"
+name = "edgetam-dimos"
 version = "1.0"
-source = { git = "https://github.com/facebookresearch/EdgeTAM.git#a1209a454c9950d531498074a95ecf3a3ba02dfd" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "hydra-core" },
     { name = "iopath" },
@@ -1855,6 +1855,7 @@ dependencies = [
     { name = "torchvision" },
     { name = "tqdm" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/7a/ea/bec55e18e19b6e43ed5f18bfcb699933ab82744fa8a52209ac6e94a6d6d8/edgetam_dimos-1.0.tar.gz", hash = "sha256:4fea5fd5a5aa17f9145dc4f35abc41de9426acaa0d59cae9b467cf26e657d4a7", size = 74935, upload-time = "2026-01-19T22:53:39.159Z" }
 
 [[package]]
 name = "einops"

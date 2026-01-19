@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Any
+
 import mujoco
 import numpy as np
+from numpy.typing import NDArray
 
 from dimos.core.transport import LCMTransport
 from dimos.msgs.geometry_msgs import Pose
@@ -145,7 +148,7 @@ class PersonTrackPublisher:
         # Publish pose
         self._publish_pose(self._current_pos, heading + np.pi)
 
-    def _publish_pose(self, pos: np.ndarray, heading: float) -> None:
+    def _publish_pose(self, pos: NDArray[np.floating[Any]], heading: float) -> None:
         c, s = np.cos(heading / 2), np.sin(heading / 2)
         pose = Pose(
             position=[pos[0], pos[1], 0.0],
