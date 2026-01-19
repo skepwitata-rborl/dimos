@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+exec pytest "$@" -m 'not (tool or cuda or gpu or module or temporal)' dimos
