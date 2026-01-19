@@ -63,7 +63,6 @@ def _parse_csv_strings(s: str) -> list[str]:
     # Metadata is written as comma-separated values. Joint names do not contain commas.
     return [p.strip() for p in s.split(",") if p.strip()]
 
-
 class OnnxController(ABC):
     def __init__(
         self,
@@ -96,7 +95,6 @@ class OnnxController(ABC):
             providers=self._policy.get_providers(),
             outputs=self._output_names,
         )
-
 
         self._action_scale = action_scale
         self._default_angles = default_angles

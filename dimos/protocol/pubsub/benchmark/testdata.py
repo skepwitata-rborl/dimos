@@ -177,6 +177,38 @@ except (ConnectionError, ImportError):
 
 from dimos.protocol.pubsub.rospubsub import ROS_AVAILABLE, RawROS, ROSTopic
 
+try:
+    from cyclonedds.idl import IdlStruct
+
+    from dimos.protocol.pubsub.ddspubsub import DDS, Topic as DDSTopic
+
+    class DDSBenchmarkMessage(IdlStruct):
+        """DDS benchmark message using an IDL 'string' payload (latin-1 encoded bytes)."""
+
+        payload: str
+
+    @contextmanager
+    def dds_pubsub_channel() -> Generator[DDS, None, None]:
+        dds_pubsub = DDS()
+        dds_pubsub.start()
+        yield dds_pubsub
+        dds_pubsub.stop()
+
+    def dds_msggen(size: int) -> tuple[DDSTopic, DDSBenchmarkMessage]:
+        topic = DDSTopic(topic="benchmark/dds", dds_type=DDSBenchmarkMessage)
+        msg = DDSBenchmarkMessage(payload=make_data(size).decode("latin-1"))
+        return (topic, msg)
+
+    testdata.append(
+        TestCase(
+            pubsub_context=dds_pubsub_channel,
+            msg_gen=dds_msggen,
+        )
+    )
+except ImportError:
+    print("DDS not available")
+
+
 if ROS_AVAILABLE:
     from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
     from sensor_msgs.msg import Image as ROSImage
