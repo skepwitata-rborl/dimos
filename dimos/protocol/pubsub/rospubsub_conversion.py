@@ -25,6 +25,7 @@ It handles three categories of types:
 from __future__ import annotations
 
 import importlib
+import re
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
@@ -48,6 +49,8 @@ _dimos_type_cache: dict[str, type[DimosMsg] | None] = {}
 _lcm_type_cache: dict[str, type[Any]] = {}
 
 # Field name mappings between ROS and LCM (ROS name -> LCM name)
+# This is some mixup in dimos_lcm having ROS1 and ROS2 message definitions?
+# Would be good to clarify later, but this works for now
 _ROS_TO_LCM_FIELD_MAP: dict[str, str] = {
     "nanosec": "nsec",  # ROS2 Time.nanosec -> LCM Time.nsec
 }
@@ -280,7 +283,6 @@ def _create_ros_instance_for_lcm_msg(lcm_msg: Any, ros_type_hint: str) -> Any:
     # Parse the type hint to get the message type
     # e.g., "sequence<sensor_msgs/PointField>" -> "sensor_msgs", "PointField"
     # e.g., "sensor_msgs/PointField" -> "sensor_msgs", "PointField"
-    import re
 
     match = re.search(r"(\w+)/(\w+)", ros_type_hint)
     if match:

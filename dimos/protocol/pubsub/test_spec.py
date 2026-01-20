@@ -315,9 +315,9 @@ async def test_async_iterator(
 def test_high_volume_messages(
     pubsub_context: Callable[[], Any], topic: Any, values: list[Any]
 ) -> None:
-    """
-    Test that all 5k messages are received correctly.
-    Limited to 5k because ros transport cannot handle more
+    """Test that all 5k messages are received correctly.
+    Limited to 5k because ros transport cannot handle more.
+    Might want to have separate expectations per transport later
     """
     with pubsub_context() as x:
         # Create a list to capture received messages

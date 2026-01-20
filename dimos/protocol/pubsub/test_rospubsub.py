@@ -58,7 +58,6 @@ def test_basic_conversion(publisher, subscriber):
         event.set()
 
     subscriber.subscribe(topic, callback)
-    time.sleep(0.1)  # let subscription establish
     publisher.publish(topic, Vector3(1.0, 2.0, 3.0))
 
     assert event.wait(timeout=2.0), "No message received"
@@ -91,7 +90,6 @@ def test_pointcloud2_pubsub(publisher, subscriber):
         event.set()
 
     subscriber.subscribe(topic, callback)
-    time.sleep(0.1)  # let subscription establish
     publisher.publish(topic, original)
 
     assert event.wait(timeout=5.0), "No PointCloud2 message received"
@@ -141,7 +139,6 @@ def test_pointcloud2_empty_pubsub(publisher, subscriber):
         event.set()
 
     subscriber.subscribe(topic, callback)
-    time.sleep(0.1)
     publisher.publish(topic, original)
 
     assert event.wait(timeout=2.0), "No empty PointCloud2 message received"
@@ -169,7 +166,6 @@ def test_posestamped_pubsub(publisher, subscriber):
         event.set()
 
     subscriber.subscribe(topic, callback)
-    time.sleep(0.1)
     publisher.publish(topic, original)
 
     assert event.wait(timeout=2.0), "No PoseStamped message received"
