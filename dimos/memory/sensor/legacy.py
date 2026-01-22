@@ -22,7 +22,13 @@ import os
 from pathlib import Path
 import pickle
 import re
+import time
 from typing import Any, cast
+
+import reactivex as rx
+from reactivex.disposable import CompositeDisposable, Disposable
+from reactivex.observable import Observable
+from reactivex.scheduler import TimeoutScheduler
 
 from dimos.memory.sensor.base import SensorStore, T
 from dimos.utils.data import get_data, get_data_dir
@@ -48,6 +54,12 @@ class LegacyPickleStore(SensorStore[T]):
         # Create new recording (directory created on first save)
         store = LegacyPickleStore("my_recording/images")
         store.save(image)  # uses image.ts for timestamp
+
+    Backward compatibility:
+        This class also supports the old TimedSensorReplay/SensorReplay API:
+        - iterate_ts() - iterate returning (timestamp, data) tuples
+        - files - property returning list of file paths
+        - load_one() - load a single pickle file
     """
 
     def __init__(self, name: str | Path, autocast: Callable[[Any], T] | None = None) -> None:
@@ -137,12 +149,24 @@ class LegacyPickleStore(SensorStore[T]):
     def _iter_items(
         self, start: float | None = None, end: float | None = None
     ) -> Iterator[tuple[float, T]]:
-        """Lazy iteration - loads one file at a time."""
-        for filepath in self._iter_files():
+        """Lazy iteration - loads one file at a time.
+
+        Handles both timed format (timestamp, data) and non-timed format (just data).
+        For non-timed data, uses file index as synthetic timestamp.
+        """
+        for idx, filepath in enumerate(self._iter_files()):
             try:
                 with open(filepath, "rb") as f:
-                    ts, data = pickle.load(f)
+                    raw = pickle.load(f)
+
+                # Handle both timed (timestamp, data) and non-timed (just data) formats
+                if isinstance(raw, tuple) and len(raw) == 2:
+                    ts, data = raw
                     ts = float(ts)
+                else:
+                    # Non-timed format: use index as synthetic timestamp
+                    ts = float(idx)
+                    data = raw
             except Exception:
                 continue
 
@@ -179,3 +203,168 @@ class LegacyPickleStore(SensorStore[T]):
             return None
 
         return closest_ts
+
+    # === Backward-compatible API (TimedSensorReplay/SensorReplay) ===
+
+    @property
+    def files(self) -> list[Path]:
+        """Return list of pickle files (backward compatibility with SensorReplay)."""
+        return list(self._iter_files())
+
+    def load_one(self, name: int | str | Path) -> T | Any:
+        """Load a single pickle file (backward compatibility with SensorReplay).
+
+        Args:
+            name: File index (int), filename without extension (str), or full path (Path)
+
+        Returns:
+            For TimedSensorReplay: (timestamp, data) tuple
+            For SensorReplay: just the data
+        """
+        root_dir = self._get_root_dir()
+
+        if isinstance(name, int):
+            full_path = root_dir / f"{name:03d}.pickle"
+        elif isinstance(name, Path):
+            full_path = name
+        else:
+            full_path = root_dir / Path(f"{name}.pickle")
+
+        with open(full_path, "rb") as f:
+            data = pickle.load(f)
+
+        # Legacy format: (timestamp, data) tuple
+        if isinstance(data, tuple) and len(data) == 2:
+            ts, payload = data
+            if self._autocast is not None:
+                payload = self._autocast(payload)
+            return (ts, payload)
+
+        # Non-timed format: just data
+        if self._autocast is not None:
+            data = self._autocast(data)
+        return data
+
+    def iterate_ts(
+        self,
+        seek: float | None = None,
+        duration: float | None = None,
+        from_timestamp: float | None = None,
+        loop: bool = False,
+    ) -> Iterator[tuple[float, T]]:
+        """Iterate with timestamps (backward compatibility with TimedSensorReplay).
+
+        Args:
+            seek: Relative seconds from start
+            duration: Duration window in seconds
+            from_timestamp: Absolute timestamp to start from
+            loop: Whether to loop the data
+
+        Yields:
+            (timestamp, data) tuples
+        """
+        first = self.first_timestamp()
+        if first is None:
+            return
+
+        # Calculate start timestamp
+        start: float | None = None
+        if from_timestamp is not None:
+            start = from_timestamp
+        elif seek is not None:
+            start = first + seek
+
+        # Calculate end timestamp
+        end: float | None = None
+        if duration is not None:
+            start_ts = start if start is not None else first
+            end = start_ts + duration
+
+        while True:
+            yield from self._iter_items(start=start, end=end)
+            if not loop:
+                break
+
+    def stream(
+        self,
+        speed: float = 1.0,
+        seek: float | None = None,
+        duration: float | None = None,
+        from_timestamp: float | None = None,
+        loop: bool = False,
+    ) -> Observable[T]:
+        """Stream data as Observable with timing control.
+
+        Uses stored timestamps from pickle files for timing (not data.ts).
+        """
+
+        def subscribe(
+            observer: rx.abc.ObserverBase[T],
+            scheduler: rx.abc.SchedulerBase | None = None,
+        ) -> rx.abc.DisposableBase:
+            sched = scheduler or TimeoutScheduler()
+            disp = CompositeDisposable()
+            is_disposed = False
+
+            iterator = self.iterate_ts(
+                seek=seek, duration=duration, from_timestamp=from_timestamp, loop=loop
+            )
+
+            try:
+                first_ts, first_data = next(iterator)
+            except StopIteration:
+                observer.on_completed()
+                return Disposable()
+
+            start_local_time = time.time()
+            start_replay_time = first_ts
+
+            observer.on_next(first_data)
+
+            try:
+                next_message: tuple[float, T] | None = next(iterator)
+            except StopIteration:
+                observer.on_completed()
+                return disp
+
+            def schedule_emission(message: tuple[float, T]) -> None:
+                nonlocal next_message, is_disposed
+
+                if is_disposed:
+                    return
+
+                ts, data = message
+
+                try:
+                    next_message = next(iterator)
+                except StopIteration:
+                    next_message = None
+
+                target_time = start_local_time + (ts - start_replay_time) / speed
+                delay = max(0.0, target_time - time.time())
+
+                def emit(
+                    _scheduler: rx.abc.SchedulerBase, _state: object
+                ) -> rx.abc.DisposableBase | None:
+                    if is_disposed:
+                        return None
+                    observer.on_next(data)
+                    if next_message is not None:
+                        schedule_emission(next_message)
+                    else:
+                        observer.on_completed()
+                    return None
+
+                sched.schedule_relative(delay, emit)
+
+            if next_message is not None:
+                schedule_emission(next_message)
+
+            def dispose() -> None:
+                nonlocal is_disposed
+                is_disposed = True
+                disp.dispose()
+
+            return Disposable(dispose)
+
+        return rx.create(subscribe)

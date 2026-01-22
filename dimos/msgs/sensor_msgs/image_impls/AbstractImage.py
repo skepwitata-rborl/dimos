@@ -25,7 +25,7 @@ import numpy as np
 import rerun as rr
 
 try:
-    import cupy as cp  # type: ignore[import-not-found]
+    import cupy as cp  # type: ignore[import-not-found,import-untyped]
 
     HAS_CUDA = True
 except Exception:  # pragma: no cover - optional dependency

@@ -51,7 +51,7 @@ def test_timed_sensor_replay() -> None:
 
 def test_iterate_ts_no_seek() -> None:
     """Test iterate_ts without seek (start_timestamp=None)"""
-    odom_store = replay.TimedSensorReplay("unitree_office_walk/odom")
+    odom_store = replay.TimedSensorReplay("unitree_office_walk/odom", autocast=Odometry.from_msg)
 
     # Test without seek
     ts_msgs = []
@@ -207,7 +207,7 @@ def test_first_methods() -> None:
     assert abs(first_msg.ts - first_from_iterate.ts) < 1.0  # Within 1 second tolerance
 
     # Test TimedSensorReplay.first_timestamp()
-    odom_store = replay.TimedSensorReplay("unitree_office_walk/odom")
+    odom_store = replay.TimedSensorReplay("unitree_office_walk/odom", autocast=Odometry.from_msg)
     first_ts = odom_store.first_timestamp()
     assert first_ts is not None
     assert isinstance(first_ts, float)
@@ -224,7 +224,7 @@ def test_first_methods() -> None:
 
 def test_find_closest() -> None:
     """Test find_closest method in TimedSensorReplay"""
-    odom_store = replay.TimedSensorReplay("unitree_office_walk/odom")
+    odom_store = replay.TimedSensorReplay("unitree_office_walk/odom", autocast=Odometry.from_msg)
 
     # Get some reference timestamps
     timestamps = []

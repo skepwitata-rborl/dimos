@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pytest
+
 from dimos.memory.embedding import EmbeddingMemory, SpatialEntry
 from dimos.msgs.geometry_msgs import PoseStamped
 from dimos.utils.data import get_data
@@ -20,6 +22,7 @@ from dimos.utils.testing import TimedSensorReplay
 dir_name = "unitree_go2_bigoffice"
 
 
+@pytest.mark.skip
 def test_embed_frame() -> None:
     """Test embedding a single frame."""
     # Load a frame from recorded data

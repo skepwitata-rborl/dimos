@@ -28,8 +28,7 @@ from dimos.utils.testing import TimedSensorReplay
 def test_build_map():
     mapper = VoxelGridMapper(publish_interval=-1)
 
-    for ts, frame in TimedSensorReplay("unitree_go2_bigoffice/lidar").iterate_duration():
-        print(ts, frame)
+    for _ts, frame in TimedSensorReplay("unitree_go2_bigoffice/lidar").iterate():
         mapper.add_frame(frame)
 
     pickle_file = get_data_dir() / "unitree_go2_bigoffice_map.pickle"
