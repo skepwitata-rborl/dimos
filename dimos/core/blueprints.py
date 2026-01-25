@@ -38,7 +38,7 @@ logger = setup_logger()
 
 
 @dataclass(frozen=True)
-class ModuleConnection:
+class Stream:
     name: str
     type: type
     direction: Literal["in", "out"]
@@ -47,13 +47,13 @@ class ModuleConnection:
 @dataclass(frozen=True)
 class _BlueprintAtom:
     module: type[Module]
-    connections: tuple[ModuleConnection, ...]
+    connections: tuple[Stream, ...]
     args: tuple[Any]
     kwargs: dict[str, Any]
 
     @staticmethod
     def create(module: type[Module], args: tuple[Any], kwargs: dict[str, Any]) -> Self:
-        connections: list[ModuleConnection] = []
+        connections: list[Stream] = []
 
         # Use get_type_hints() to properly resolve string annotations.
         try:
@@ -71,7 +71,7 @@ class _BlueprintAtom:
                 continue
             direction = "in" if origin == In else "out"
             type_ = get_args(annotation)[0]
-            connections.append(ModuleConnection(name=name, type=type_, direction=direction))  # type: ignore[arg-type]
+            connections.append(Stream(name=name, type=type_, direction=direction))  # type: ignore[arg-type]
 
         return _BlueprintAtom(
             module=module, connections=tuple(connections), args=args, kwargs=kwargs
