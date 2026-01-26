@@ -89,11 +89,24 @@ DimosCluster = Client
 
 
 def patchdask(dask_client: Client, local_cluster: LocalCluster) -> DimosCluster:
+    # Track Docker modules for cleanup in close_all()
+    dask_client._docker_modules: list = []  # type: ignore[attr-defined]
+
     def deploy(  # type: ignore[no-untyped-def]
         actor_class,
         *args,
         **kwargs,
     ):
+        from dimos.core.docker_module import DockerModule, is_docker_module
+
+        # Check if this module should run in Docker (based on its default_config)
+        if is_docker_module(actor_class):
+            logger.info("Deploying module in Docker.", module=actor_class.__name__)
+            dm = DockerModule(actor_class, *args, **kwargs)
+            dask_client._docker_modules.append(dm)  # type: ignore[attr-defined]
+            return dm
+
+        # Default: deploy as Dask actor
         logger.info("Deploying module.", module=actor_class.__name__)
         actor = dask_client.submit(  # type: ignore[no-untyped-call]
             actor_class,
@@ -168,6 +181,14 @@ def patchdask(dask_client: Client, local_cluster: LocalCluster) -> DimosCluster:
         if hasattr(dask_client, "_closed") and dask_client._closed:
             return
         dask_client._closed = True  # type: ignore[attr-defined]
+
+        # Stop all Docker modules (in reverse order of deployment)
+        for dm in reversed(dask_client._docker_modules):  # type: ignore[attr-defined]
+            try:
+                dm.stop()
+            except Exception:
+                pass
+        dask_client._docker_modules.clear()  # type: ignore[attr-defined]
 
         # Stop all SharedMemory transports before closing Dask
         # This prevents the "leaked shared_memory objects" warning and hangs

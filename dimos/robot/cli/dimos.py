@@ -15,7 +15,7 @@
 from enum import Enum
 import inspect
 import sys
-from typing import Any, Optional, get_args, get_origin
+from typing import Any, List, Optional, Union, get_args, get_origin
 
 import typer
 
@@ -104,7 +104,7 @@ main.callback()(create_dynamic_callback())  # type: ignore[no-untyped-call]
 def run(
     ctx: typer.Context,
     robot_type: RobotType = typer.Argument(..., help="Type of robot to run"),
-    extra_modules: list[str] = typer.Option(  # type: ignore[valid-type]
+    extra_modules: List[str] = typer.Option(  # type: ignore[valid-type]
         [], "--extra-module", help="Extra modules to add to the blueprint"
     ),
 ) -> None:
@@ -180,11 +180,16 @@ def humancli(ctx: typer.Context) -> None:
 topic_app = typer.Typer(help="Topic commands for pub/sub")
 main.add_typer(topic_app, name="topic")
 
+# Docker conversion commands
+from dimos.robot.cli.dockerize import app as docker_app
+
+main.add_typer(docker_app, name="docker")
+
 
 @topic_app.command()
 def echo(
     topic: str = typer.Argument(..., help="Topic name to listen on (e.g., /goal_request)"),
-    type_name: str | None = typer.Argument(
+    type_name: Optional[str] = typer.Argument(
         None,
         help="Optional message type (e.g., PoseStamped). If omitted, infer from '/topic#pkg.Msg'.",
     ),

@@ -1,35 +1,22 @@
-# GraspGen - Grasp Pose Generation Model
+# GraspGen - Grasp Pose Generation Model (Option A - DimOS Base)
 # https://github.com/NVlabs/GraspGen
 #
-# This Dockerfile packages the GraspGen model for grasp pose generation.
-# Requires CUDA 12.8+ for PyTorch and CUDA extensions.
+# Uses dimos-base which already has: Conda, 'app' env, DimOS, entrypoint
+# Just add GraspGen-specific dependencies!
 
-FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
+FROM ghcr.io/dimensionalos/dimos-base:cuda12.8-py310
 
-# System dependencies for GraspGen
+# System dependencies for GraspGen (some already in base, but ensure all present)
 RUN apt-get update && apt-get install -y \
-    git wget curl build-essential \
-    libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev \
     libglu1-mesa libglu1-mesa-dev libegl1-mesa-dev \
     iproute2 \
     && rm -rf /var/lib/apt/lists/*
-
-# Python environment (Miniconda)
-ENV CONDA_DIR=/opt/conda
-RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
-    bash /tmp/miniconda.sh -b -p $CONDA_DIR && rm /tmp/miniconda.sh
-ENV PATH=$CONDA_DIR/bin:$PATH
-
-RUN conda init bash && \
-    conda config --set channel_priority flexible && \
-    echo 'yes' | conda tos accept --override-channels --channel defaults 2>/dev/null || true && \
-    conda create -n app python=3.10 -y && conda clean -afy
 
 # Clone GraspGen repository
 WORKDIR /app
 RUN git clone https://github.com/NVlabs/GraspGen.git && cd GraspGen && git checkout main
 
-# Install PyTorch with CUDA 12.8
+# Install PyTorch with CUDA 12.8 (into existing 'app' env)
 RUN conda run -n app pip install --no-cache-dir \
     torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu128
 
@@ -67,5 +54,4 @@ ENV CUDA_LAUNCH_BLOCKING=0
 ENV TORCH_CUDA_ARCH_LIST="8.0 8.6 8.9 9.0 12.0"
 ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-# Default command
-CMD ["conda", "run", "-n", "app", "python", "-c", "print('GraspGen ready')"]
+# No CMD/ENTRYPOINT needed - dimos-base already has /dimos/entrypoint.sh

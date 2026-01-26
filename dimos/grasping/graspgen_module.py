@@ -11,30 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-"""GraspGen Module: Docker-based grasp generation service.
-
-Model checkpoints are managed via Git LFS in data/graspgen/. Use the build
-script to prepare the Docker image:
-    cd dimos/grasping/docker_context && ./build.sh
-"""
-
 from __future__ import annotations
 
-import base64
-import json
-import subprocess
+import os
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-import requests
 
-from dimos.core.module import Module, ModuleConfig, rpc
-from dimos.core.stream import Out
-from dimos.grasping.data_paths import SUPPORTED_GRIPPERS, ensure_graspgen_data
+from dimos.core.docker_module import DockerModuleConfig
+from dimos.core.module import Module, rpc
+from dimos.core.stream import In, Out
 from dimos.msgs.geometry_msgs import PoseArray
 from dimos.msgs.sensor_msgs import PointCloud2
 from dimos.msgs.std_msgs import Header
@@ -43,16 +33,19 @@ from dimos.utils.transform_utils import matrix_to_pose
 
 logger = setup_logger()
 
+SUPPORTED_GRIPPERS = frozenset({"robotiq_2f_140", "franka_panda", "single_suction_cup_30mm"})
+
 
 @dataclass
-class GraspGenConfig(ModuleConfig):
+class GraspGenConfig(DockerModuleConfig):
     """Configuration for GraspGen module."""
 
-    docker_image: str = "dimos-graspgen"
-    container_name: str = "dimos_graspgen_service"
-    service_port: int = 8094
-    service_url: str = "http://localhost:8094"
-    startup_timeout: int = 60
+    # Docker defaults
+    docker_image: str = "dimos-graspgen:latest"
+    docker_gpus: str = "all"
+    docker_shm_size: str = "4g"
+
+    # GraspGen settings
     gripper_type: str = "robotiq_2f_140"
     num_grasps: int = 400
     topk_num_grasps: int = 100
@@ -62,73 +55,37 @@ class GraspGenConfig(ModuleConfig):
     visualization_output_path: str = "/tmp/grasp_visualization.json"
 
 
-class GraspGenModule(Module):
-    """Docker-based grasp generation service.
+class GraspGenModule(Module[GraspGenConfig]):
+    default_config = GraspGenConfig
 
-    Manages a Docker container running GraspGen and provides RPC-based
-    grasp generation. Container starts lazily on first request.
-    """
-
+    # Streams
+    pointcloud: In[PointCloud2]
+    scene_pointcloud: In[PointCloud2]
     grasps: Out[PoseArray]
 
-    _container_running: bool = False
-
-    def __init__(self, config: GraspGenConfig | None = None, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        self.config = config or GraspGenConfig()
-
-        # Validate gripper type
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
         if self.config.gripper_type not in SUPPORTED_GRIPPERS:
-            raise ValueError(
-                f"Unsupported gripper: {self.config.gripper_type}. "
-                f"Supported: {', '.join(sorted(SUPPORTED_GRIPPERS))}"
-            )
+            raise ValueError(f"Unsupported gripper '{self.config.gripper_type}'. Use: {SUPPORTED_GRIPPERS}")
+        self._sampler = self._gripper_info = None
+        self._initialized = False
 
     @rpc
     def start(self) -> None:
-        """Initialize module (Docker starts lazily on first grasp request)."""
         super().start()
-        logger.info("GraspGenModule ready (Docker starts on first request)")
+        logger.info(f"GraspGenModule started (gripper={self.config.gripper_type})")
 
     @rpc
     def stop(self) -> None:
-        """Stop the Docker container."""
-        if self._container_running:
-            try:
-                subprocess.run(
-                    ["docker", "stop", self.config.container_name],
-                    check=True,
-                    timeout=10,
-                )
-                self._container_running = False
-                logger.info("GraspGen container stopped")
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Error stopping container: {e}")
-            except subprocess.TimeoutExpired:
-                subprocess.run(
-                    ["docker", "rm", "-f", self.config.container_name],
-                    check=False,
-                )
-                self._container_running = False
-
+        self._sampler = self._gripper_info = None
+        self._initialized = False
+        # Clear GPU memory if torch available
+        try:
+            import torch
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
         super().stop()
-
-    @rpc
-    def get_status(self) -> dict[str, Any]:
-        """Get service status."""
-        status: dict[str, Any] = {
-            "container_running": self._container_running,
-            "service_url": self.config.service_url,
-        }
-
-        if self._container_running:
-            try:
-                resp = requests.get(f"{self.config.service_url}/health", timeout=2)
-                status["healthy"] = resp.status_code == 200
-            except Exception:
-                status["healthy"] = False
-
-        return status
 
     @rpc
     def generate_grasps(
@@ -136,238 +93,174 @@ class GraspGenModule(Module):
         pointcloud: PointCloud2,
         scene_pointcloud: PointCloud2 | None = None,
     ) -> PoseArray | None:
-        """Generate grasps for a point cloud.
-
-        Args:
-            pointcloud: Object point cloud
-            scene_pointcloud: Optional scene point cloud for collision filtering.
-                              If provided and filter_collisions=True, grasps will be
-                              filtered against the scene.
-
-        Returns:
-            PoseArray with grasp poses sorted by quality, or None on failure
-        """
-        if not self._ensure_container_running():
+        """Generate grasp poses for the given pointcloud."""
+        # Validate and initialize
+        if not pointcloud:
+            return None
+        if not self._initialized and not self._initialize_graspgen():
             return None
 
         try:
+            start_time = time.time()
             points = self._extract_points(pointcloud)
             if len(points) < 10:
-                logger.warning(f"Too few points: {len(points)}")
                 return None
 
-            # Call service
-            payload = {
-                "point_cloud_b64": base64.b64encode(
-                    points.astype(np.float32).tobytes()
-                ).decode(),
-                "gripper_type": self.config.gripper_type,
-                "num_grasps": self.config.num_grasps,
-                "topk_num_grasps": self.config.topk_num_grasps,
-                "grasp_threshold": self.config.grasp_threshold,
-                "filter_collisions": self.config.filter_collisions,
-            }
-
-            # Add scene point cloud for collision filtering if provided
-            if self.config.filter_collisions and scene_pointcloud is not None:
+            # Run inference (with optional collision filtering)
+            scene_points = None
+            if scene_pointcloud and self.config.filter_collisions:
                 scene_points = self._extract_points(scene_pointcloud)
-                if len(scene_points) > 0:
-                    payload["scene_pc_b64"] = base64.b64encode(
-                        scene_points.astype(np.float32).tobytes()
-                    ).decode()
-                    logger.info(
-                        f"Including scene pointcloud for collision filtering: "
-                        f"{len(scene_points)} points"
-                    )
-
-            response = self._call_service(payload)
-            if response is None:
+            grasps, scores = self._run_inference(points, scene_points)
+            if len(grasps) == 0:
                 return None
 
-            grasps_data = response["grasps"]
-            if self.config.filter_collisions:
-                total_grasps = len(grasps_data)
-                grasps_data = [g for g in grasps_data if g.get("collision_free", True)]
-                logger.info(
-                    f"Collision filtering: {len(grasps_data)}/{total_grasps} "
-                    "grasps are collision-free"
-                )
+            # Convert and publish results
+            pose_array = self._grasps_to_pose_array(grasps, scores, pointcloud.frame_id)
+            logger.info(f"Generated {len(pose_array.poses)} grasps in {(time.time() - start_time) * 1000:.0f}ms")
+            self.grasps.publish(pose_array)
 
-            poses = self._parse_grasps(grasps_data, pointcloud.frame_id)
-            self.grasps.publish(poses)
-
-            logger.info(f"Generated {len(poses.poses)} grasps")
-
-            # Save visualization data for Open3D visualization (only collision-free grasps)
             if self.config.save_visualization_data:
-                self._save_visualization_data(points, grasps_data, pointcloud.frame_id)
-
-            return poses
-
+                self._save_visualization_data(points, grasps, scores, pointcloud.frame_id)
+            return pose_array
         except Exception as e:
             logger.error(f"Grasp generation failed: {e}")
             return None
 
-    def _check_docker_image_exists(self) -> bool:
-        """Check if the Docker image exists locally."""
-        try:
-            result = subprocess.run(
-                ["docker", "image", "inspect", self.config.docker_image],
-                capture_output=True,
-                check=False,
-            )
-            return result.returncode == 0
-        except Exception:
-            return False
-
-    def _ensure_container_running(self) -> bool:
-        """Start Docker container if needed."""
-        if self._container_running:
+    def _initialize_graspgen(self) -> bool:
+        """Load GraspGen model and gripper info. Returns True on success."""
+        if self._initialized:
             return True
 
-        # Check if Docker image exists
-        if not self._check_docker_image_exists():
-            logger.error(
-                f"Docker image '{self.config.docker_image}' not found. "
-                "Build it with:\n"
-                "  cd dimos/grasping/docker_context && ./build.sh"
-            )
+        try:
+            # Setup GraspGen path and environment
+            graspgen_path = os.environ.get("GRASPGEN_PATH", "/dimos/third_party/GraspGen")
+            if graspgen_path not in sys.path:
+                sys.path.insert(0, graspgen_path)
+            os.environ["PYOPENGL_PLATFORM"] = "egl"
+
+            # Load model and gripper
+            from grasp_gen.grasp_server import GraspGenSampler, load_grasp_cfg
+            from grasp_gen.robot import get_gripper_info
+
+            grasp_cfg = load_grasp_cfg(self._get_gripper_config_path())
+            self._sampler = GraspGenSampler(grasp_cfg)
+            self._gripper_info = get_gripper_info(self.config.gripper_type)
+            self._initialized = True
+            logger.info("GraspGen initialized")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to initialize GraspGen: {e}")
+            self._sampler = self._gripper_info = None
             return False
 
-        logger.info("Starting GraspGen Docker container...")
+    def _get_gripper_config_path(self) -> str:
+        graspgen_path = os.environ.get("GRASPGEN_PATH", "/dimos/third_party/GraspGen")
+        config_name = f"graspgen_{self.config.gripper_type}.yml"
 
-        # Remove existing container
-        subprocess.run(
-            ["docker", "rm", "-f", self.config.container_name],
-            capture_output=True,
-            check=False,
+        for subdir in ("GraspGenModels/checkpoints", "checkpoints"):
+            path = os.path.join(graspgen_path, subdir, config_name)
+            if os.path.exists(path):
+                return path
+
+        return os.path.join(graspgen_path, "checkpoints", config_name)
+
+    def _run_inference(
+        self, object_pc: np.ndarray, scene_pc: np.ndarray | None = None
+    ) -> tuple[np.ndarray, np.ndarray]:
+        if self._sampler is None:
+            return np.array([]), np.array([])
+
+        import torch
+        import trimesh.transformations as tra
+        from grasp_gen.grasp_server import GraspGenSampler
+        from grasp_gen.utils.point_cloud_utils import filter_colliding_grasps, point_cloud_outlier_removal
+
+        pc_torch = torch.from_numpy(object_pc)
+        min_points = 50
+
+        if len(object_pc) > 100:
+            pc_filtered, _ = point_cloud_outlier_removal(pc_torch)
+            object_pc_filtered = pc_filtered.numpy()
+            if len(object_pc_filtered) < min_points:
+                object_pc_filtered = object_pc
+        else:
+            object_pc_filtered = object_pc
+
+        if len(object_pc_filtered) < min_points:
+            return np.array([]), np.array([])
+
+        grasps, scores = GraspGenSampler.run_inference(
+            object_pc_filtered,
+            self._sampler,
+            grasp_threshold=self.config.grasp_threshold,
+            num_grasps=self.config.num_grasps,
+            topk_num_grasps=self.config.topk_num_grasps,
+            remove_outliers=False,
         )
 
-        # Start new container
-        try:
-            cmd = [
-                "docker", "run",
-                "--gpus", "all",
-                "-d", "--rm",
-                "-p", f"{self.config.service_port}:8094",
-                "-e", f"DEFAULT_GRIPPER={self.config.gripper_type}",
-                "--name", self.config.container_name,
-                self.config.docker_image,
-            ]
-            subprocess.run(cmd, check=True)
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to start container: {e}")
-            return False
+        if len(grasps) == 0:
+            return np.array([]), np.array([])
 
-        # Wait for service
-        if not self._wait_for_service():
-            return False
+        grasps_np = grasps.cpu().numpy()
+        scores_np = scores.cpu().numpy()
 
-        self._container_running = True
-        logger.info("GraspGen service ready")
-        return True
+        if self.config.filter_collisions and scene_pc is not None:
+            if self._gripper_info is None:
+                return grasps_np, scores_np
 
-    def _wait_for_service(self) -> bool:
-        """Wait for service to become ready."""
-        start = time.time()
-        while time.time() - start < self.config.startup_timeout:
-            try:
-                resp = requests.get(f"{self.config.service_url}/health", timeout=2)
-                if resp.status_code == 200:
-                    return True
-            except requests.exceptions.RequestException:
-                pass
-            time.sleep(1)
+            pc_mean = object_pc_filtered.mean(axis=0)
+            T_center = tra.translation_matrix(-pc_mean)
+            grasps_centered = np.array([T_center @ g for g in grasps_np])
+            scene_pc_centered = tra.transform_points(scene_pc, T_center)
 
-        logger.error("Service startup timeout")
-        return False
+            collision_free_mask = filter_colliding_grasps(
+                scene_pc=scene_pc_centered,
+                grasp_poses=grasps_centered,
+                gripper_collision_mesh=self._gripper_info.collision_mesh,
+                collision_threshold=0.02,
+            )
+            grasps_np = grasps_np[collision_free_mask]
+            scores_np = scores_np[collision_free_mask]
 
-    def _call_service(self, payload: dict[str, Any]) -> dict[str, Any] | None:
-        """Call grasp generation service with retry."""
-        for attempt in range(3):
-            try:
-                resp = requests.post(
-                    f"{self.config.service_url}/generate",
-                    json=payload,
-                    timeout=30,
-                )
-                if resp.status_code == 200:
-                    return resp.json()
-
-                if resp.status_code == 500 and "CUDA" in resp.text:
-                    logger.warning(f"CUDA error, retry {attempt + 1}/3")
-                    time.sleep(2)
-                    continue
-
-                logger.error(f"Service error: {resp.status_code}")
-                return None
-
-            except Exception as e:
-                logger.error(f"Service call failed: {e}")
-                return None
-
-        return None
+        return grasps_np, scores_np
 
     def _extract_points(self, msg: PointCloud2) -> np.ndarray:
-        """Extract Nx3 points from PointCloud2."""
         points = msg.points().numpy()
         if not np.isfinite(points).all():
             raise ValueError("Point cloud contains NaN/Inf")
         return points
 
-    def _save_visualization_data(
-        self,
-        points: np.ndarray,
-        grasps_data: list[dict[str, Any]],
-        frame_id: str,
-    ) -> None:
-        """Save grasp data for offline visualization with Open3D.
-
-        Args:
-            points: Nx3 point cloud
-            grasps_data: List of grasp dicts with transforms and scores
-            frame_id: Coordinate frame ID
-        """
-        try:
-            transforms = [g["transform"] for g in grasps_data]
-            scores = [g.get("score", 1.0) for g in grasps_data]
-
-            data = {
-                "point_cloud": points.tolist(),
-                "grasps": transforms,
-                "scores": scores,
-                "frame_id": frame_id,
-                "timestamp": time.time(),
-                "num_grasps": len(transforms),
-            }
-
-            output_path = Path(self.config.visualization_output_path)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-
-            with open(output_path, "w") as f:
-                json.dump(data, f)
-
-            logger.debug(f"Saved visualization to: {output_path}")
-
-        except Exception as e:
-            logger.warning(f"Failed to save visualization data: {e}")
-
-    def _parse_grasps(
-        self, grasps_data: list[dict[str, Any]], frame_id: str
-    ) -> PoseArray:
-        """Convert grasp transforms to PoseArray."""
-        poses = []
-        for grasp in grasps_data:
-            transform = np.array(grasp["transform"]).reshape(4, 4)
-            pose = matrix_to_pose(transform)
-            poses.append(pose)
-
+    def _grasps_to_pose_array(self, grasps: np.ndarray, scores: np.ndarray, frame_id: str) -> PoseArray:
+        sorted_indices = np.argsort(scores)[::-1]
+        poses = [matrix_to_pose(grasps[idx]) for idx in sorted_indices]
         return PoseArray(header=Header(frame_id), poses=poses)
 
+    def _save_visualization_data(
+        self, points: np.ndarray, grasps: np.ndarray, scores: np.ndarray, frame_id: str
+    ) -> None:
+        import json
 
-def graspgen(**kwargs: Any) -> GraspGenModule:
-    """Create GraspGen module blueprint."""
-    return GraspGenModule.blueprint(config=GraspGenConfig(**kwargs))
+        try:
+            data = {
+                "point_cloud": points.tolist(),
+                "grasps": [g.tolist() for g in grasps],
+                "scores": scores.tolist(),
+                "frame_id": frame_id,
+                "timestamp": time.time(),
+            }
+            output_path = Path(self.config.visualization_output_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(output_path, "w") as f:
+                json.dump(data, f)
+        except Exception as e:
+            logger.warning(f"Failed to save visualization: {e}")
 
 
-__all__ = ["GraspGenModule", "GraspGenConfig", "graspgen"]
+def graspgen(docker_file_path: Path | str, docker_build_context: Path | str | None = None, **kwargs: Any) -> Any:
+    """Create a GraspGen module blueprint. All kwargs passed through to config."""
+    dockerfile = Path(docker_file_path)
+    build_context = Path(docker_build_context) if docker_build_context else dockerfile.parent
+    return GraspGenModule.blueprint(docker_file=dockerfile, docker_build_context=build_context, **kwargs)
+
+
+__all__ = ["GraspGenModule", "GraspGenConfig", "SUPPORTED_GRIPPERS", "graspgen"]

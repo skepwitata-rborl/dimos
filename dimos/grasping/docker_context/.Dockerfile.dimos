@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # GraspGen - Grasp Pose Generation Model
 # https://github.com/NVlabs/GraspGen
 #
@@ -69,3 +70,13 @@ ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Default command
 CMD ["conda", "run", "-n", "app", "python", "-c", "print('GraspGen ready')"]
+# ==== DIMOS MODULE CONVERSION ====
+# Copy DimOS source from build context
+COPY dimos /dimos/source/dimos/
+COPY pyproject.toml /dimos/source/
+COPY docker/python/module-install.sh /tmp/module-install.sh
+
+# Install DimOS and create entrypoint
+RUN bash /tmp/module-install.sh /dimos/source && rm /tmp/module-install.sh
+
+ENTRYPOINT ["/dimos/entrypoint.sh"]

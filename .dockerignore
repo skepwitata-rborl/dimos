@@ -43,19 +43,21 @@ build/
 .env.local
 .env.*.local
 
-# Large data files
+# Large data files - exclude most of data/
 data/*
-!data/.lfs/
+# Keep graspgen checkpoints for Docker build (COPY'd to third_party/)
+!data/graspgen/
+!data/graspgen/checkpoints/
+!data/graspgen/checkpoints/*.pth
+!data/graspgen/checkpoints/*.yml
 
-# Model files (can be downloaded at runtime)
-*.pt
-*.pth
+# Model/weight directories and files
+onnx/
 *.onnx
 *.pb
 *.h5
 *.ckpt
 *.safetensors
-checkpoints/
 assets/model-cache
 
 # Logs
