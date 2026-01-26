@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import TYPE_CHECKING, Any
 
 from dimos.protocol.pubsub.encoders import (
@@ -23,16 +24,11 @@ from dimos.protocol.pubsub.encoders import (
     PickleEncoderMixin,
 )
 from dimos.protocol.pubsub.spec import PubSub
-from dimos.protocol.service.lcmservice import (
-    LCMConfig,
-    LCMService,
-    autoconf,
-)
+from dimos.protocol.service.lcmservice import LCMConfig, LCMService, autoconf
 from dimos.utils.logging_config import setup_logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    import re
     import threading
 
     from dimos.msgs import DimosMsg
@@ -40,15 +36,83 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
+class Glob:
+    """Glob pattern that compiles to regex for LCM subscriptions.
+
+    Supports:
+        * - matches any characters except /
+        ** - matches any characters including /
+        ? - matches single character
+
+    Example:
+        Topic(topic=Glob("/sensor/*"))  # matches /sensor/temp, /sensor/humidity
+        Topic(topic=Glob("/robot/**"))  # matches /robot/arm/joint1, /robot/leg/motor
+    """
+
+    def __init__(self, pattern: str) -> None:
+        self._glob = pattern
+        self._regex = self._compile(pattern)
+
+    @staticmethod
+    def _compile(pattern: str) -> str:
+        """Convert glob pattern to regex."""
+        result = []
+        i = 0
+        while i < len(pattern):
+            c = pattern[i]
+            if c == "*":
+                if i + 1 < len(pattern) and pattern[i + 1] == "*":
+                    result.append(".*")
+                    i += 2
+                else:
+                    result.append("[^/]*")
+                    i += 1
+            elif c == "?":
+                result.append(".")
+                i += 1
+            elif c in r"\^$.|+[]{}()":
+                result.append("\\" + c)
+                i += 1
+            else:
+                result.append(c)
+                i += 1
+        return "".join(result)
+
+    @property
+    def pattern(self) -> str:
+        """Return the regex pattern string."""
+        return self._regex
+
+    @property
+    def glob(self) -> str:
+        """Return the original glob pattern."""
+        return self._glob
+
+    def __repr__(self) -> str:
+        return f"Glob({self._glob!r})"
+
+
 @dataclass
 class Topic:
-    topic: str = ""
+    topic: str | re.Pattern[str] | Glob
     lcm_type: type[DimosMsg] | None = None
+
+    @property
+    def is_pattern(self) -> bool:
+        return isinstance(self.topic, re.Pattern | Glob)
+
+    @property
+    def pattern(self) -> str:
+        if isinstance(self.topic, re.Pattern):
+            return self.topic.pattern
+        if isinstance(self.topic, Glob):
+            return self.topic.pattern
+        return self.topic
 
     def __str__(self) -> str:
         if self.lcm_type is None:
-            return self.topic
-        return f"{self.topic}#{self.lcm_type.msg_name}"
+            return self.pattern
+        return f"{self.pattern}#{self.lcm_type.msg_name}"
 
 
 class LCMPubSubBase(LCMService, PubSub[Topic, Any]):
@@ -62,19 +126,17 @@ class LCMPubSubBase(LCMService, PubSub[Topic, Any]):
     _stop_event: threading.Event
     _thread: threading.Thread | None
 
-    def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
-        super().__init__(**kwargs)
-
-    def publish(self, topic: Topic, message: bytes) -> None:
+    def publish(self, topic: Topic | str, message: bytes) -> None:
         """Publish a message to the specified channel."""
         if self.l is None:
             logger.error("Tried to publish after LCM was closed")
             return
 
-        self.l.publish(str(topic), message)
+        topic_str = str(topic) if isinstance(topic, Topic) else topic
+        self.l.publish(topic_str, message)
 
     def subscribe(
-        self, topic: Topic, callback: Callable[[bytes, Topic], Any]
+        self, topic: Topic | str, callback: Callable[[bytes, Topic | str], Any]
     ) -> Callable[[], None]:
         if self.l is None:
             logger.error("Tried to subscribe after LCM was closed")
@@ -84,7 +146,17 @@ class LCMPubSubBase(LCMService, PubSub[Topic, Any]):
 
             return noop
 
-        lcm_subscription = self.l.subscribe(str(topic), lambda _, msg: callback(msg, topic))
+        # Handle both Topic objects and raw strings
+        if isinstance(topic, Topic) and topic.is_pattern:
+
+            def handler(channel: str, msg: bytes) -> None:
+                matched_topic = Topic(topic=channel, lcm_type=topic.lcm_type)
+                callback(msg, matched_topic)
+
+            lcm_subscription = self.l.subscribe(str(topic), handler)
+        else:
+            topic_str = str(topic) if isinstance(topic, Topic) else topic
+            lcm_subscription = self.l.subscribe(topic_str, lambda _, msg: callback(msg, topic))
 
         # Set queue capacity to 10000 to handle high-volume bursts
         lcm_subscription.set_queue_capacity(10000)
@@ -117,9 +189,11 @@ class JpegLCM(
 
 __all__ = [
     "LCM",
+    "Glob",
     "JpegLCM",
     "LCMEncoderMixin",
     "LCMPubSubBase",
     "PickleLCM",
+    "Topic",
     "autoconf",
 ]

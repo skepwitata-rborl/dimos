@@ -133,6 +133,7 @@ class AllPubSub(PubSub[TopicT, MsgT], ABC):
         return self.subscribe_all(on_msg)
 
 
+# this is for ros
 class DiscoveryPubSub(PubSub[TopicT, MsgT], ABC):
     """Mixin for PubSub that supports discovery of topics.
 
@@ -179,7 +180,7 @@ class GlobPubSub(AllPubSub[TopicT, MsgT]):
     ...
 
 
-class RegexPubSub(AllPubSub[TopicT, MsgT]):
+class RegexPubSub(GlobPubSub[TopicT, MsgT]):
     """Mixin only used for specifying that the PubSub uses regex-style topic matching.
 
     Subclass from this if you support regex pattern matching (e.g. LCM, ZeroMQ, Zenoh).
