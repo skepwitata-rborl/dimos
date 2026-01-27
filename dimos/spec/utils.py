@@ -104,7 +104,7 @@ def get_protocol_method_signatures(proto: type[Protocol]) -> dict[str, inspect.S
     Return a mapping of method_name -> inspect.Signature
     for all methods required by a Protocol.
     """
-    if not getattr(proto, "_is_protocol", False):
+    if not is_protocol(proto):
         raise TypeError(f"{proto} is not a Protocol")
 
     methods: dict[str, inspect.Signature] = {}
