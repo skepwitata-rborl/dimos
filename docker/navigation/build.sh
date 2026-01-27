@@ -79,6 +79,31 @@ else
     cd ..
 fi
 
+# Clone or checkout vector_perception_ros with semantic_mapping branch
+if [ ! -d "vector_perception_ros" ]; then
+    echo -e "${YELLOW}Cloning vector_perception_ros repository (semantic_mapping branch)...${NC}"
+    git clone -b semantic_mapping https://github.com/VectorRobotics/vector_perception_ros.git
+    echo -e "${GREEN}Repository cloned successfully!${NC}"
+else
+    # Directory exists, ensure we're on the semantic_mapping branch
+    cd vector_perception_ros
+    CURRENT_BRANCH=$(git branch --show-current)
+    if [ "$CURRENT_BRANCH" != "semantic_mapping" ]; then
+        echo -e "${YELLOW}Switching from ${CURRENT_BRANCH} to semantic_mapping branch...${NC}"
+        # Stash any local changes
+        if git stash --quiet 2>/dev/null; then
+            echo -e "${YELLOW}Stashed local changes${NC}"
+        fi
+        git fetch origin semantic_mapping
+        git checkout semantic_mapping
+        git pull origin semantic_mapping
+        echo -e "${GREEN}Switched to semantic_mapping branch${NC}"
+    else
+        echo -e "${GREEN}Already on semantic_mapping branch${NC}"
+    fi
+    cd ..
+fi
+
 if [ ! -d "unity_models" ]; then
     echo -e "${YELLOW}Using office_building_1 as the Unity environment...${NC}"
     tar -xf ../../data/.lfs/office_building_1.tar.gz
@@ -93,6 +118,7 @@ echo "  - Install ROS packages and dependencies"
 echo "  - Build the autonomy stack"
 echo "  - Build Livox-SDK2 for Mid-360 lidar"
 echo "  - Build SLAM dependencies (Sophus, Ceres, GTSAM)"
+echo "  - Build vector_perception_ros for semantic mapping"
 echo "  - Install Python dependencies for DimOS"
 echo ""
 
@@ -101,8 +127,25 @@ cd ../..
 docker compose -f docker/navigation/docker-compose.yml build
 
 echo ""
+echo -e "${YELLOW}Verifying build...${NC}"
+
+# Quick smoke test - check key components
+docker run --rm dimos_autonomy_stack:${ROS_DISTRO} /bin/bash -c "
+    source /opt/ros/${ROS_DISTRO}/setup.bash && \
+    source /ros2_ws/install/setup.bash && \
+    source /opt/dimos-venv/bin/activate && \
+    echo '  [✓] ROS ${ROS_DISTRO} environment' && \
+    python3 -c 'import dimos; print(\"  [✓] dimos package\")' && \
+    python3 -c 'import ultralytics; print(\"  [✓] ultralytics (YOLO)\")' && \
+    python3 -c 'import open3d; print(\"  [✓] open3d\")' && \
+    ros2 pkg list | grep -q track_anything && echo '  [✓] track_anything ROS package' && \
+    ros2 pkg list | grep -q tare_planner && echo '  [✓] tare_planner ROS package' && \
+    echo 'All checks passed!'
+" || { echo -e "${RED}Verification failed!${NC}"; exit 1; }
+
+echo ""
 echo -e "${GREEN}============================================${NC}"
-echo -e "${GREEN}Docker image built successfully!${NC}"
+echo -e "${GREEN}Docker image built and verified!${NC}"
 echo -e "${GREEN}Image: dimos_autonomy_stack:${ROS_DISTRO}${NC}"
 echo -e "${GREEN}============================================${NC}"
 echo ""

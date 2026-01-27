@@ -54,9 +54,8 @@ RUN mkdir -p ${WORKSPACE}/src
 # Copy autonomy stack source
 COPY docker/navigation/ros-navigation-autonomy-stack ${WORKSPACE}/src/ros-navigation-autonomy-stack
 
-# Clone vector_perception_ros for semantic mapping
-RUN git clone -b semantic_mapping https://github.com/VectorRobotics/vector_perception_ros.git \
-    ${WORKSPACE}/src/vector_perception_ros
+# Copy vector_perception_ros for semantic mapping
+COPY docker/navigation/vector_perception_ros ${WORKSPACE}/src/vector_perception_ros
 
 # Compatibility fix: In Humble, cv_bridge uses .h extension, but Jazzy uses .hpp
 # Create a symlink so code written for Jazzy works on Humble
@@ -181,12 +180,6 @@ COPY --from=builder ${WORKSPACE}/src/ros-navigation-autonomy-stack/system_simula
 # Copy vector_perception_ros source (Python packages need source for runtime)
 COPY --from=builder ${WORKSPACE}/src/vector_perception_ros ${WORKSPACE}/src/vector_perception_ros
 
-# Build vector_perception_ros packages (Python-only, needs runtime stage)
-RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
-    source ${WORKSPACE}/install/setup.bash && \
-    cd ${WORKSPACE} && \
-    colcon build --packages-select vector_perception_utils track_anything detect_anything --symlink-install"
-
 # Create directories
 RUN mkdir -p ${DIMOS_PATH} \
     ${WORKSPACE}/src/ros-navigation-autonomy-stack/src/base_autonomy/vehicle_simulator/mesh/unity \
@@ -253,24 +246,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Create Python venv and install dependencies
+# ROS2 build tools needed when building packages with message definitions in venv
 RUN python3 -m venv /opt/dimos-venv && \
     /opt/dimos-venv/bin/pip install --no-cache-dir \
     pyyaml \
-    # vector_perception_ros dependencies
-    numpy==1.26.4 \
-    opencv-python \
-    scipy \
-    pillow \
-    tqdm \
-    lark \
-    open3d \
-    ultralytics \
-    sam2 \
-    hydra-core \
-    omegaconf \
-    timm \
-    && /opt/dimos-venv/bin/pip install --no-cache-dir \
-    git+https://github.com/facebookresearch/EdgeTAM.git
+    empy==3.3.4 \
+    catkin_pkg \
+    lark
+
+# Install vector_perception_ros dependencies from requirements.txt
+RUN /opt/dimos-venv/bin/pip install --no-cache-dir \
+    -r ${WORKSPACE}/src/vector_perception_ros/requirements.txt
+
+# Build vector_perception_ros packages (Python-only, needs venv active)
+# Note: Don't use --symlink-install here as it breaks console_scripts entry points
+RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
+    source ${WORKSPACE}/install/setup.bash && \
+    source /opt/dimos-venv/bin/activate && \
+    cd ${WORKSPACE} && \
+    colcon build --packages-select vector_perception_utils track_anything detect_anything semantic_mapping"
+
+# Fix: venv builds put scripts in bin/ instead of lib/<pkg>/ - create symlinks for ROS2
+RUN mkdir -p ${WORKSPACE}/install/vector_perception_utils/lib/vector_perception_utils && \
+    ln -sf ${WORKSPACE}/install/vector_perception_utils/bin/detection_to_waypoint \
+           ${WORKSPACE}/install/vector_perception_utils/lib/vector_perception_utils/detection_to_waypoint
 
 # Copy dimos source and install as editable package
 # The volume mount at runtime will overlay /workspace/dimos, but the editable
@@ -278,6 +277,10 @@ RUN python3 -m venv /opt/dimos-venv && \
 COPY pyproject.toml setup.py /workspace/dimos/
 COPY dimos /workspace/dimos/dimos
 RUN /opt/dimos-venv/bin/pip install --no-cache-dir -e "/workspace/dimos[unitree]"
+
+# Downgrade numpy to 1.x for compatibility with ROS2 cv_bridge (compiled against numpy 1.x)
+# Must be AFTER dimos install since dimos dependencies may pull in numpy>=2
+RUN /opt/dimos-venv/bin/pip install --no-cache-dir "numpy<2"
 
 # Set up shell environment
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc && \

@@ -214,7 +214,7 @@ services:
         python3 /usr/local/bin/goal_autonomy_relay.py &
         echo "Starting Foxglove Bridge on port 8765..."
         echo "Connect via Foxglove Studio: ws://$(hostname -I | awk '{print $1}'):8765"
-        ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
+        ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765 >/dev/null 2>&1
 
     # Capabilities for hardware operations
     cap_add:
@@ -301,8 +301,8 @@ services:
             ros2 launch vehicle_simulator system_bagfile_with_exploration_planner.launch.py &
             echo "Starting image decompression republisher..."
             ros2 run image_transport republish compressed raw --ros-args -r in/compressed:=/camera/image/compressed -r out:=/camera/color/image_raw &
-            echo "Starting Track Anything 3D for semantic mapping..."
-            ros2 launch track_anything track_3d.launch.py &
+            echo "Starting semantic mapping..."
+            ros2 launch semantic_mapping semantic_mapping.launch.py &
             RVIZ_CFG=/ros2_ws/src/vector_perception_ros/rviz/semantic_mapping.rviz
         elif [ "$USE_ROUTE_PLANNER" = "true" ]; then
             echo "Starting bagfile replay with FAR Route Planner..."
@@ -322,7 +322,7 @@ services:
 
         # Start Foxglove Bridge
         echo "Starting Foxglove Bridge on port 8765..."
-        ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765 &
+        ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765 >/dev/null 2>&1 &
         sleep 1
 
         # Play bagfile
