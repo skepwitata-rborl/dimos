@@ -53,6 +53,7 @@ __all__ = [
     "TFSpec",
     "Transport",
     "ZenohTransport",
+    "colors",
     "pLCMTransport",
     "pSHMTransport",
     "rpc",
@@ -73,7 +74,7 @@ class CudaCleanupPlugin:
             import sys
 
             if "cupy" in sys.modules:
-                import cupy as cp  # type: ignore[import-not-found]
+                import cupy as cp  # type: ignore[import-not-found, import-untyped]
 
                 # Clear memory pools
                 mempool = cp.get_default_memory_pool()
@@ -179,7 +180,7 @@ def patchdask(dask_client: Client, local_cluster: LocalCluster) -> DimosCluster:
         try:
             import gc
 
-            from dimos.protocol.pubsub import shmpubsub
+            from dimos.protocol.pubsub.impl import shmpubsub
 
             for obj in gc.get_objects():
                 if isinstance(obj, shmpubsub.SharedMemoryPubSubBase):
