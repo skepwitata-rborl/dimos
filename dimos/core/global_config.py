@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from functools import cached_property
 import re
 from typing import Literal, TypeAlias
 
@@ -57,19 +56,13 @@ class GlobalConfig(BaseSettings):
     )
 
     def update(self, **kwargs: object) -> None:
-        """Update config fields in place and invalidate cached properties."""
+        """Update config fields in place."""
         for key, value in kwargs.items():
             if not hasattr(self, key):
                 raise AttributeError(f"GlobalConfig has no field '{key}'")
             setattr(self, key, value)
-        for prop in (
-            "unitree_connection_type",
-            "mujoco_start_pos_float",
-            "mujoco_camera_position_float",
-        ):
-            self.__dict__.pop(prop, None)
 
-    @cached_property
+    @property
     def unitree_connection_type(self) -> str:
         if self.replay:
             return "replay"
@@ -77,12 +70,12 @@ class GlobalConfig(BaseSettings):
             return "mujoco"
         return "webrtc"
 
-    @cached_property
+    @property
     def mujoco_start_pos_float(self) -> tuple[float, float]:
         x, y = _get_all_numbers(self.mujoco_start_pos)
         return (x, y)
 
-    @cached_property
+    @property
     def mujoco_camera_position_float(self) -> tuple[float, ...]:
         if self.mujoco_camera_position is None:
             return (-0.906, 0.008, 1.101, 4.931, 89.749, -46.378)

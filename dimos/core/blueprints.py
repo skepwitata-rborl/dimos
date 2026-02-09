@@ -259,8 +259,8 @@ class Blueprint:
         for blueprint in self.blueprints:
             kwargs = {**blueprint.kwargs}
             sig = inspect.signature(blueprint.module.__init__)
-            if "global_config" in sig.parameters:
-                kwargs["global_config"] = global_config
+            if "cfg" in sig.parameters:
+                kwargs["cfg"] = global_config
             module_specs.append((blueprint.module, blueprint.args, kwargs))
 
         module_coordinator.deploy_parallel(module_specs)
