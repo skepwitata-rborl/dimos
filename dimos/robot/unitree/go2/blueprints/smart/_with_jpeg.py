@@ -13,10 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dimos.core.blueprints import autoconnect
-from dimos.core.transport import JpegLcmTransport, JpegShmTransport
+from dimos.core.transport import JpegLcmTransport
 from dimos.msgs.sensor_msgs import Image
-from dimos.robot.foxglove_bridge import foxglove_bridge
 from dimos.robot.unitree.go2.blueprints.smart.unitree_go2 import unitree_go2
 
 _with_jpeglcm = unitree_go2.transports(
@@ -25,17 +23,4 @@ _with_jpeglcm = unitree_go2.transports(
     }
 )
 
-_with_jpegshm = autoconnect(
-    unitree_go2.transports(
-        {
-            ("color_image", Image): JpegShmTransport("/color_image", quality=75),
-        }
-    ),
-    foxglove_bridge(
-        jpeg_shm_channels=[
-            "/color_image#sensor_msgs.Image",
-        ]
-    ),
-)
-
-__all__ = ["_with_jpeglcm", "_with_jpegshm"]
+__all__ = ["_with_jpeglcm"]
