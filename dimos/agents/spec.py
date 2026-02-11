@@ -45,7 +45,7 @@ logger = setup_logger()
 
 
 # FIXME: I dont see a stable (and dynamic) way to get these, this is only for type-hints and Paul's PR should replace this in a couple of days (this is a stop-gap change to get CI passing)
-_SUPPORTED_PROVIDERS = [
+_providers = [
     "ANTHROPIC",
     "AZURE_AI",
     "AZURE_OPENAI",
@@ -69,7 +69,6 @@ _SUPPORTED_PROVIDERS = [
     "UPSTAGE",
     "XAI",
 ]
-_providers = {provider.upper(): provider for provider in _SUPPORTED_PROVIDERS}
 Provider = Enum("Provider", _providers, type=str)  # type: ignore[misc]
 
 
