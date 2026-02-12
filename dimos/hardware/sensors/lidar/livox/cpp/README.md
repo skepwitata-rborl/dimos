@@ -40,7 +40,7 @@ don't run it directly. The Python wrapper passes LCM topic strings and config
 as CLI args:
 
 ```python
-from dimos.hardware.sensors.lidar.livox.cpp.module import Mid360CppModule
+from dimos.hardware.sensors.lidar.livox.module import Mid360CppModule
 from dimos.core.blueprints import autoconnect
 
 autoconnect(
@@ -69,5 +69,5 @@ name used by dimos subscribers.
 |---|---|
 | `main.cpp` | Livox SDK2 callbacks, frame accumulation, LCM publishing |
 | `dimos_native_module.hpp` | Reusable header for parsing NativeModule CLI args |
-| `module.py` | Python NativeModule wrapper (`Mid360CppModule`) |
+| `../module.py` | Python NativeModule wrapper (`Mid360CppModule`) |
 | `CMakeLists.txt` | Build config, fetches dimos-lcm headers automatically |

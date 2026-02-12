@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from dimos.core.blueprints import autoconnect
-from dimos.hardware.sensors.lidar.livox.cpp.module import Mid360CppModule
+from dimos.hardware.sensors.lidar.livox.module import Mid360CppModule
 from dimos.visualization.rerun.bridge import rerun_bridge
 
 mid360cpp = autoconnect(
