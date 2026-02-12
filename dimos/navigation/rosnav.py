@@ -30,8 +30,11 @@ from reactivex.subject import Subject
 from dimos import spec
 from dimos.agents import Reducer, Stream, skill  # type: ignore[attr-defined]
 from dimos.core import DimosCluster, In, LCMTransport, Module, Out, rpc
-from dimos.core.module import ModuleConfig
-from dimos.core.transport import ROSTransport
+from dimos.core._dask_exports import DimosCluster
+from dimos.core.core import rpc
+from dimos.core.module import Module, ModuleConfig
+from dimos.core.stream import In, Out
+from dimos.core.transport import LCMTransport, ROSTransport
 from dimos.msgs.geometry_msgs import (
     PoseStamped,
     Quaternion,
@@ -45,6 +48,8 @@ from dimos.msgs.sensor_msgs import Joy, PointCloud2
 from dimos.msgs.std_msgs import Bool, Int8
 from dimos.msgs.tf2_msgs.TFMessage import TFMessage
 from dimos.navigation.base import NavigationInterface, NavigationState
+from dimos.protocol.skill.skill import skill
+from dimos.protocol.skill.type import Reducer, Stream
 from dimos.utils.logging_config import setup_logger
 from dimos.utils.transform_utils import euler_to_quaternion
 

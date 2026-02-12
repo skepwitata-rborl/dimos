@@ -25,6 +25,7 @@ from typing import Any
 import cv2
 from dimos_lcm.std_msgs import String
 import numpy as np
+from numpy.typing import NDArray
 
 from dimos.core import In, Module, Out, rpc
 from dimos.models.qwen.video_query import get_bbox_from_qwen_frame
@@ -115,7 +116,7 @@ class DroneTrackingModule(Module):
             return data
 
     @rpc
-    def start(self) -> bool:
+    def start(self) -> None:
         """Start the tracking module and subscribe to video input."""
         if self.video_input.transport:
             self.video_input.subscribe(self._on_new_frame)
@@ -126,7 +127,7 @@ class DroneTrackingModule(Module):
         if self.follow_object_cmd.transport:
             self.follow_object_cmd.subscribe(self._on_follow_object_cmd)
 
-        return True
+        return
 
     @rpc
     def stop(self) -> None:
@@ -310,10 +311,10 @@ class DroneTrackingModule(Module):
 
     def _draw_tracking_overlay(
         self,
-        frame: np.ndarray[Any, np.dtype[Any]],
+        frame: NDArray[np.uint8],
         bbox: tuple[int, int, int, int],
         center: tuple[int, int],
-    ) -> np.ndarray[Any, np.dtype[Any]]:
+    ) -> NDArray[np.uint8]:  # type: ignore[type-arg]
         """Draw tracking visualization overlay.
 
         Args:
@@ -324,7 +325,7 @@ class DroneTrackingModule(Module):
         Returns:
             Frame with overlay drawn
         """
-        overlay = frame.copy()
+        overlay: NDArray[np.uint8] = frame.copy()  # type: ignore[type-arg]
         x, y, w, h = bbox
 
         # Draw tracking box (green)
