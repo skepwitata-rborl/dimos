@@ -167,7 +167,7 @@ def test_autoconnect(args_file) -> None:
         assert producer.cmd_vel.transport.topic == native.cmd_vel.transport.topic
 
         # Custom transport was applied
-        assert native.pointcloud.transport.topic == "/my/custom/lidar"
+        assert native.pointcloud.transport.topic.topic == "/my/custom/lidar"
     finally:
         coordinator.stop()
 
