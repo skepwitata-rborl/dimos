@@ -5,7 +5,7 @@ This guide covers the setup and configuration of the Unitree G1 humanoid robot, 
 To enable the robot for movement using the controller, note it can be different for different versions of Unitree G1's
 1. L2 + B
 2. L2 + Up
-3. R2 + A
+<!-- 3. R2 + A -->
 
 ### Safety Notes
 - Always ensure the robot has clear space before enabling movement

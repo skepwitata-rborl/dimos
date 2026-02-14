@@ -16,15 +16,101 @@
 from typing import Any
 
 from reactivex.disposable import Disposable
+from dataclasses import dataclass
 
 from dimos import spec
-from dimos.core import DimosCluster, In, Module, rpc
+from dimos.core import DimosCluster, In, Module, rpc, ModuleConfig
 from dimos.core.global_config import GlobalConfig, global_config
 from dimos.msgs.geometry_msgs import Twist
 from dimos.robot.unitree.connection import UnitreeWebRTCConnection
 from dimos.utils.logging_config import setup_logger
+from dimos.robot.unitree.g1.api import G1Api
+from dimos.protocol.service import Configurable
 
 logger = setup_logger()
+
+
+@dataclass
+class G1Config(ModuleConfig):
+    ip: str | None
+    api_type: str | None = None
+    network_interface: str = "eth0"
+    
+class G1(Module, Configurable):
+    default_config = G1Config
+    config: G1Config
+    
+    cmd_vel: In[Twist]
+    
+    api: G1Api | None = None
+    
+    _global_config: GlobalConfig
+
+    def __init__(
+        self,
+        ip: str | None = None,
+        api_type: str | None = None,
+        network_interface: str = "eth0",
+        cfg: GlobalConfig = global_config,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        self._global_config = cfg
+        self.ip = ip if ip is not None else self._global_config.robot_ip
+        self.api_type = api_type or self._global_config.unitree_api_type
+        self.network_interface = network_interface
+        self.api = None
+        super().__init__(*args, **kwargs)
+
+    @rpc
+    def start(self) -> None:
+        super().start()
+
+        match self.api_type:
+            case "webrtc":
+                assert self.ip is not None, "IP address must be provided"
+                self.api = UnitreeWebRTCapi(self.ip)
+            case "onboard":
+                # Use native SDK for onboard control
+                from dimos.robot.unitree.g1.onboard_api import G1Onboardapi
+
+                mode = getattr(self._global_config, "g1_mode", "ai")
+                logger.info(f"Using onboard SDK api on {self.network_interface}")
+                self.api = G1Onboardapi(
+                    network_interface=self.network_interface, mode=mode
+                )
+            case "replay":
+                raise ValueError("Replay api not implemented for G1 robot")
+            case "mujoco":
+                raise ValueError(
+                    "This module does not support simulation, use G1Simapi instead"
+                )
+            case _:
+                raise ValueError(f"Unknown api type: {self.api_type}")
+
+        assert self.api is not None
+        self.api.start()
+
+        self._disposables.add(Disposable(self.cmd_vel.subscribe(self.move)))
+
+    @rpc
+    def stop(self) -> None:
+        assert self.api is not None
+        self.api.stop()
+        super().stop()
+
+    @rpc
+    def move(self, twist: Twist, duration: float = 0.0) -> None:
+        assert self.api is not None
+        self.api.move(twist, duration)
+
+    @rpc
+    def publish_request(self, topic: str, data: dict[str, Any]) -> dict[Any, Any]:
+        logger.info(f"Publishing request to topic: {topic} with data: {data}")
+        assert self.api is not None
+        return self.api.publish_request(topic, data)  # type: ignore[no-any-return]
+    
+
 
 
 class G1Connection(Module):
@@ -99,7 +185,6 @@ class G1Connection(Module):
         logger.info(f"Publishing request to topic: {topic} with data: {data}")
         assert self.connection is not None
         return self.connection.publish_request(topic, data)  # type: ignore[no-any-return]
-
 
 g1_connection = G1Connection.blueprint
 
