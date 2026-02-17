@@ -64,7 +64,7 @@ To enable rerun within your own blueprint simply include `RerunBridgeModule`:
 
 ```py
 from dimos.visualization.rerun.bridge import RerunBridgeModule
-from dimos.hardware.camera.module import CameraModule
+from dimos.hardware.sensors.camera.module import CameraModule
 from dimos.protocol.pubsub.impl.lcmpubsub import LCM
 
 camera_demo = autoconnect(
