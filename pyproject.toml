@@ -73,11 +73,10 @@ dependencies = [
 [project.scripts]
 lcmspy = "dimos.utils.cli.lcmspy.run_lcmspy:main"
 foxglove-bridge = "dimos.utils.cli.foxglove_bridge.run_foxglove_bridge:main"
-skillspy = "dimos.utils.cli.skillspy.skillspy:main"
 agentspy = "dimos.utils.cli.agentspy.agentspy:main"
 humancli = "dimos.utils.cli.human.humanclianim:main"
 dimos = "dimos.robot.cli.dimos:main"
-rerun-bridge = "dimos.visualization.rerun.bridge:main"
+rerun-bridge = "dimos.visualization.rerun.bridge:app"
 doclinks = "dimos.utils.docs.doclinks:main"
 
 [project.optional-dependencies]
@@ -175,19 +174,6 @@ manipulation = [
     # Planning (Drake)
     "drake>=1.40.0; platform_machine != 'aarch64'",
 
-    # Contact Graspnet Dependencies
-    "h5py>=3.7.0",
-    "pyrender>=0.1.45",
-    "trimesh>=3.22.0",
-    "python-fcl>=0.7.0.4; platform_machine != 'aarch64'",
-    "pyquaternion>=0.9.9",
-    "matplotlib>=3.7.1",
-    "rtree",
-    "pandas>=1.5.2",
-    "tqdm>=4.65.0",
-    "pyyaml>=6.0",
-    "contact-graspnet-pytorch",
-
     # Hardware SDKs
     "piper-sdk",
     "xarm-python-sdk>=1.17.0",
@@ -196,6 +182,10 @@ manipulation = [
     "kaleido>=0.2.1",
     "plotly>=5.9.0",
     "xacro",
+
+    # Other
+    "matplotlib>=3.7.1",
+    "pyyaml>=6.0",
 ]
 
 
@@ -255,9 +245,14 @@ dev = [
     "types-tabulate>=0.9.0.20241207,<1",
     "types-tensorflow>=2.18.0.20251008,<3",
     "types-tqdm>=4.67.0.20250809,<5",
+    "types-psycopg2>=2.9.21.20251012",
 
     # Tools
     "py-spy",
+]
+
+psql = [
+    "psycopg2-binary>=2.9.11"
 ]
 
 sim = [
@@ -279,6 +274,11 @@ sim = [
 
 drone = [
     "pymavlink"
+]
+
+dds = [
+    "dimos[dev]",
+    "cyclonedds>=0.10.5",
 ]
 
 # Minimal dependencies for Docker modules that communicate with the DimOS host
@@ -305,6 +305,7 @@ docker = [
 base = [
     "dimos[agents,web,perception,visualization,sim]",
 ]
+
 
 [tool.ruff]
 line-length = 100
@@ -349,9 +350,12 @@ exclude = "^dimos/models/Detic(/|$)|^dimos/rxpy_backpressure(/|$)|.*/test_.|.*/c
 [[tool.mypy.overrides]]
 module = [
     "annotation_protocol",
+    "cyclonedds",
+    "cyclonedds.*",
     "dimos_lcm.*",
     "etils",
     "geometry_msgs.*",
+    "lazy_loader",
     "mujoco",
     "mujoco_playground.*",
     "nav_msgs.*",
@@ -410,13 +414,5 @@ ignore = [
     "*/package-lock.json",
     "dimos/dashboard/dimos.rbl",
     "dimos/web/dimos_interface/themes.json",
+    "dimos/manipulation/manipulation_module.py",
 ]
-
-[tool.uv]
-# Build dependencies for packages that don't declare them properly
-extra-build-dependencies = { contact-graspnet-pytorch = ["numpy"] }
-
-default-groups = []
-
-[tool.uv.sources]
-contact-graspnet-pytorch = { git = "https://github.com/dimensionalOS/contact_graspnet_pytorch.git" }
