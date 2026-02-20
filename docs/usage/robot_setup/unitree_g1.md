@@ -2,6 +2,22 @@
 
 This guide covers the setup and configuration of the Unitree G1 humanoid robot, including network connectivity, SDK installation, and basic usage.
 
+To enable the robot for movement using the controller, note it can be different for different versions of Unitree G1's
+1. L2 + B
+2. L2 + Up
+<!-- 3. R2 + A -->
+
+### Safety Notes
+- Always ensure the robot has clear space before enabling movement
+- Keep the emergency stop button accessible
+- When using low-level control, disable high-level motion services first
+- Start with high-level control before attempting low-level motor control
+
+```
+(after pressing L2 + Up):  Current state: FSM 4: Unknown FSM 4
+After sending stand command: FSM 200: Start
+```
+
 ## Table of Contents
 - [Network Configuration](#network-configuration)
 - [System Requirements](#system-requirements)
@@ -261,17 +277,6 @@ if __name__ == "__main__":
 ## Robot Operation
 
 ### Enabling Movement
-
-To enable the robot for movement using the controller, note it can be different for different versions of Unitree G1's
-1. L2 + B
-2. L2 + Up
-3. R2 + A
-
-### Safety Notes
-- Always ensure the robot has clear space before enabling movement
-- Keep the emergency stop button accessible
-- When using low-level control, disable high-level motion services first
-- Start with high-level control before attempting low-level motor control
 
 ## Configuration
 

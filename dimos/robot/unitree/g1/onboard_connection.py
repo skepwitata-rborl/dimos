@@ -296,31 +296,34 @@ class G1OnboardConnection(Resource):
         vy = twist.linear.y
         vyaw = twist.angular.z
 
-        # Cancel existing timer and start a new one
+        # Cancel existing timer
         if self.stop_timer:
             self.stop_timer.cancel()
-
-        # Set up auto-stop timer (safety feature)
-        def auto_stop() -> None:
-            try:
-                self.loco_client.StopMove()
-            except Exception as e:
-                logger.error(f"Auto-stop failed: {e}")
-
-        self.stop_timer = threading.Timer(self.cmd_vel_timeout, auto_stop)
-        self.stop_timer.daemon = True
-        self.stop_timer.start()
+            self.stop_timer = None
 
         try:
             if duration > 0:
-                # Move for specific duration
-                # SDK expects velocity in m/s, duration in seconds
+                # Move for specific duration - let SDK handle timing
+                # Don't use auto-stop timer for timed movements
+                logger.info(f"Moving: vx={vx}, vy={vy}, vyaw={vyaw}, duration={duration}")
                 code = self.loco_client.SetVelocity(vx, vy, vyaw, duration)
                 if code != 0:
                     logger.warning(f"SetVelocity returned code: {code}")
                     return False
             else:
-                # Continuous movement (will timeout after cmd_vel_timeout)
+                # Continuous movement - set up auto-stop timer as safety feature
+                def auto_stop() -> None:
+                    try:
+                        logger.debug("Auto-stop timer triggered")
+                        self.loco_client.StopMove()
+                    except Exception as e:
+                        logger.error(f"Auto-stop failed: {e}")
+
+                self.stop_timer = threading.Timer(self.cmd_vel_timeout, auto_stop)
+                self.stop_timer.daemon = True
+                self.stop_timer.start()
+
+                logger.info(f"Continuous move: vx={vx}, vy={vy}, vyaw={vyaw}")
                 self.loco_client.Move(vx, vy, vyaw, continous_move=True)
 
             return True
