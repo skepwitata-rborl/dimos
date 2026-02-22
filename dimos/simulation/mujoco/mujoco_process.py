@@ -16,6 +16,7 @@
 
 import base64
 import json
+import os
 import pickle
 import signal
 import sys
@@ -228,9 +229,7 @@ def _run_simulation(config: GlobalConfig, shm: ShmReader) -> None:
 
         person_position_controller.stop()
 
-    import os as _os
-
-    _has_display = bool(_os.environ.get("DISPLAY") or _os.environ.get("WAYLAND_DISPLAY"))
+    _has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
     # Signal ready before launching the viewer so the main process doesn't time
     # out while GLFW initialises (or fails to initialise) the window.
