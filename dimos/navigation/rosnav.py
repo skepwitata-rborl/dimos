@@ -75,14 +75,28 @@ class ROSNavConfig(DockerModuleConfig):
             "FASTRTPS_DEFAULT_PROFILES_FILE": "/ros2_ws/config/fastdds.xml",
             # Set to "false" for hardware mode where the nav stack runs externally
             "START_ROS_NAV": "true",
+            # Controlled by unity_simulation field below; default false
+            "START_UNITY_SIM": "false",
         }
     )
     docker_volumes: list = field(
         default_factory=lambda: [
             # Mount live dimos source so the module is always up-to-date
             (str(_DIMOS_ROOT), "/workspace/dimos", "rw"),
+            # Mount entrypoint script so changes don't require a rebuild
+            (
+                str(Path(__file__).parent / "dimos_module_entrypoint.sh"),
+                "/usr/local/bin/dimos_module_entrypoint.sh",
+                "ro",
+            ),
         ]
     )
+
+    # --- Simulation settings ---
+    # When True, the entrypoint launches the Unity-based vehicle_simulator stack in the
+    # background (system_simulation_with_route_planner.launch.py).  Set False (default)
+    # when connecting to a real robot or when the simulation is managed externally.
+    unity_simulation: bool = False
 
     # --- Module settings ---
     local_pointcloud_freq: float = 2.0
@@ -90,6 +104,9 @@ class ROSNavConfig(DockerModuleConfig):
     sensor_to_base_link_transform: Transform = field(
         default_factory=lambda: Transform(frame_id="sensor", child_frame_id="base_link")
     )
+
+    def __post_init__(self) -> None:
+        self.docker_env["START_UNITY_SIM"] = "true" if self.unity_simulation else "false"
 
 
 class ROSNav(

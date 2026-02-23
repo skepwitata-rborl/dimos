@@ -9,6 +9,11 @@
 # Environment variables (all optional):
 #   START_ROS_NAV   - Start the ROS navigation stack in the background (default: true)
 #                     Set to "false" for hardware mode where ROS is already running
+#   START_UNITY_SIM - Launch the Unity-based vehicle_simulator within the nav stack
+#                     (default: false).  Requires START_ROS_NAV=true.
+#                     Set to "true" to run system_simulation_with_route_planner.launch.py
+#                     in the background; leave "false" to skip the Unity simulation
+#                     (e.g. when connecting to a real robot or an external sim).
 #   ROS_DISTRO      - ROS distribution (default: humble)
 #   DISPLAY         - X11 display; RViz is skipped if display socket is absent
 
@@ -35,23 +40,27 @@ fi
 # Optionally start the ROS navigation stack in the background.
 # Skip when START_ROS_NAV=false (e.g. hardware mode where the nav stack runs elsewhere).
 if [ "${START_ROS_NAV:-true}" = "true" ]; then
-    echo "[dimos_module_entrypoint] Starting ROS navigation stack in background..."
-    cd /ros2_ws/src/ros-navigation-autonomy-stack
-
     # Only launch RViz if a display is available
     DISPLAY_NUM=$(echo "${DISPLAY:-:0}" | sed 's/://')
-    RVIZ_ARG=""
     if [ ! -S "/tmp/.X11-unix/X${DISPLAY_NUM}" ]; then
         echo "[dimos_module_entrypoint] No display available, RViz will not launch"
     fi
 
-    setsid bash -c "source /opt/ros/${ROS_DISTRO:-humble}/setup.bash && \
-        source /ros2_ws/install/setup.bash && \
-        ros2 launch vehicle_simulator system_simulation_with_route_planner.launch.py \
-        enable_bridge:=false" &
-    NAV_PID=$!
-    echo "[dimos_module_entrypoint] ROS nav stack started (PID: $NAV_PID), waiting for init..."
-    sleep 5
+    # Optionally launch the Unity-based vehicle_simulator simulation stack.
+    # Controlled by START_UNITY_SIM (default: false).
+    if [ "${START_UNITY_SIM:-false}" = "true" ]; then
+        echo "[dimos_module_entrypoint] START_UNITY_SIM=true: launching Unity simulation stack in background..."
+        cd /ros2_ws/src/ros-navigation-autonomy-stack
+        setsid bash -c "source /opt/ros/${ROS_DISTRO:-humble}/setup.bash && \
+            source /ros2_ws/install/setup.bash && \
+            ros2 launch vehicle_simulator system_simulation_with_route_planner.launch.py \
+            enable_bridge:=false" &
+        SIM_PID=$!
+        echo "[dimos_module_entrypoint] Unity simulation started (PID: $SIM_PID), waiting for init..."
+        sleep 5
+    else
+        echo "[dimos_module_entrypoint] START_UNITY_SIM=false: skipping Unity simulation launch"
+    fi
 fi
 
 # Hand off to the DimOS module runner.

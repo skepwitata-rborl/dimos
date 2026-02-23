@@ -372,7 +372,9 @@ RUN if [ "${TARGETARCH}" = "arm64" ] && ls /opt/open3d-wheel/open3d*.whl 1>/dev/
 # The volume mount at runtime will overlay /workspace/dimos, but the editable
 # install creates a link that will use the volume-mounted files
 COPY pyproject.toml setup.py /workspace/dimos/
-COPY dimos /workspace/dimos/dimos
+# Create a placeholder package so the editable install can resolve dependencies at build time.
+# The real dimos source is provided at runtime via volume mount (../..:/workspace/dimos).
+RUN mkdir -p /workspace/dimos/dimos && touch /workspace/dimos/dimos/__init__.py
 RUN /opt/dimos-venv/bin/pip install --no-cache-dir -e "/workspace/dimos[unitree]"
 
 # Set up shell environment
@@ -387,8 +389,10 @@ COPY docker/navigation/run_both.sh /usr/local/bin/run_both.sh
 COPY docker/navigation/ros_launch_wrapper.py /usr/local/bin/ros_launch_wrapper.py
 COPY docker/navigation/foxglove_utility/twist_relay.py /usr/local/bin/twist_relay.py
 COPY docker/navigation/foxglove_utility/goal_autonomy_relay.py /usr/local/bin/goal_autonomy_relay.py
-COPY docker/navigation/dimos_module_entrypoint.sh /usr/local/bin/dimos_module_entrypoint.sh
-RUN chmod +x /usr/local/bin/run_both.sh /usr/local/bin/ros_launch_wrapper.py /usr/local/bin/twist_relay.py /usr/local/bin/goal_autonomy_relay.py /usr/local/bin/dimos_module_entrypoint.sh
+# dimos_module_entrypoint.sh is NOT copied here — it is mounted at runtime via
+# docker-compose (for compose usage) and via ROSNavConfig.docker_volumes (for DockerModule usage).
+# This means entrypoint changes never require a rebuild.
+RUN chmod +x /usr/local/bin/run_both.sh /usr/local/bin/ros_launch_wrapper.py /usr/local/bin/twist_relay.py /usr/local/bin/goal_autonomy_relay.py
 
 # Set up udev rules for motor controller
 RUN mkdir -p /etc/udev/rules.d && \
