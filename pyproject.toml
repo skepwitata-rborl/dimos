@@ -424,6 +424,7 @@ module = [
     "torchreid",
     "turbojpeg",
     "ultralytics.*",
+    "unitree_sdk2py.*",
     "unitree_webrtc_connect.*",
     "xarm.*",
 ]
