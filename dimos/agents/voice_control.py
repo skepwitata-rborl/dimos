@@ -20,7 +20,7 @@ import numpy as np
 import sounddevice as sd  # type: ignore[import-untyped]
 import whisper  # type: ignore[import-untyped]
 
-from dimos.agents.skills import SpeakSkill
+from dimos.agents.skills.speak_skill import SpeakSkill
 from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
 from dimos.core.stream import Out
@@ -51,6 +51,7 @@ class VoiceConfig(ModuleConfig):
     wake_silence_cutoff: float = 0.8  # seconds of silence before checking for wake word
     silence_duration: float = 5.0  # seconds of silence that ends a command recording
     hmm_interval: float = 3.0  # seconds of silence before saying the filler phrase
+    startup_phrase: str = "I'm awake"  # spoken once when the listener starts
     acknowledgment: str = "yeah"  # spoken immediately after wake word
     filler: str = "hmm"  # spoken every hmm_interval seconds during silence
     sample_rate: int = 16000
@@ -78,6 +79,7 @@ class Voice(Module):
         wake_silence_cutoff = self.config.wake_silence_cutoff
         silence_duration = self.config.silence_duration
         hmm_interval = self.config.hmm_interval
+        startup_phrase = self.config.startup_phrase
         acknowledgment = self.config.acknowledgment
         filler = self.config.filler
         sample_rate = self.config.sample_rate
@@ -87,6 +89,7 @@ class Voice(Module):
         vad_threshold = self.config.vad_threshold
 
         def _listen_loop() -> None:
+            self.speak_ref.speak(startup_phrase)
             with sd.InputStream(
                 samplerate=sample_rate, channels=channels, dtype="float32"
             ) as stream:
