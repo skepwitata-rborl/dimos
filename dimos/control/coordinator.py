@@ -49,14 +49,14 @@ from dimos.hardware.drive_trains.spec import (
     TwistBaseAdapter,
 )
 from dimos.msgs.geometry_msgs import (
-    PoseStamped,  # noqa: TC001 - needed at runtime for In[PoseStamped]
-    Twist,  # noqa: TC001 - needed at runtime for In[Twist]
+    PoseStamped,
+    Twist,
 )
 from dimos.msgs.sensor_msgs import (
     JointState,
 )
 from dimos.teleop.quest.quest_types import (
-    Buttons,  # noqa: TC001 - needed at runtime for In[Buttons]
+    Buttons,
 )
 from dimos.utils.logging_config import setup_logger
 

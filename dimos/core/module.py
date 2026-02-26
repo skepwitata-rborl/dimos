@@ -46,7 +46,7 @@ from dimos.core.core import T, rpc
 from dimos.core.global_config import GlobalConfig, global_config
 from dimos.core.introspection.module import extract_module_info, render_module_io
 from dimos.core.resource import Resource
-from dimos.core.rpc_client import RpcCall  # noqa: TC001
+from dimos.core.rpc_client import RpcCall
 from dimos.core.stream import In, Out, RemoteIn, RemoteOut, Transport
 from dimos.protocol.rpc import LCMRPC, RPCSpec
 from dimos.protocol.service import BaseConfig, Configurable

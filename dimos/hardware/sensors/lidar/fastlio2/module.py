@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from dimos.core import Out  # noqa: TC001
+from dimos.core import Out
 from dimos.core.native_module import NativeModule, NativeModuleConfig
 from dimos.hardware.sensors.lidar.livox.ports import (
     SDK_CMD_DATA_PORT,
@@ -48,8 +48,8 @@ from dimos.hardware.sensors.lidar.livox.ports import (
     SDK_POINT_DATA_PORT,
     SDK_PUSH_MSG_PORT,
 )
-from dimos.msgs.nav_msgs.Odometry import Odometry  # noqa: TC001
-from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2  # noqa: TC001
+from dimos.msgs.nav_msgs.Odometry import Odometry
+from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.spec import mapping, perception
 
 _CONFIG_DIR = Path(__file__).parent / "config"
