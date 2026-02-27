@@ -111,7 +111,8 @@ class ROSNavConfig(DockerModuleConfig):
     # Use --runtime=nvidia (Jetson) instead of --gpus all (desktop); having both conflicts.
     docker_gpus: str | None = None
     docker_extra_args: list = field(
-        default_factory=lambda: ["--runtime=nvidia"] if shutil.which("nvcc") else []
+        default_factory=lambda: ["--cap-add=NET_ADMIN"]
+        + (["--runtime=nvidia"] if shutil.which("nvcc") else [])
     )
     docker_env: dict = field(
         default_factory=lambda: {
@@ -119,6 +120,9 @@ class ROSNavConfig(DockerModuleConfig):
             "ROS_DOMAIN_ID": "42",
             "RMW_IMPLEMENTATION": "rmw_fastrtps_cpp",
             "FASTRTPS_DEFAULT_PROFILES_FILE": "/ros2_ws/config/fastdds.xml",
+            "QT_X11_NO_MITSHM": "1",
+            "NVIDIA_VISIBLE_DEVICES": "all",
+            "NVIDIA_DRIVER_CAPABILITIES": "all",
             # "ROBOT_CONFIG_PATH": "unitree/unitree_g1",
         }
     )
@@ -126,33 +130,42 @@ class ROSNavConfig(DockerModuleConfig):
 
     # --- Runtime mode settings ---
     # mode controls which ROS launch file the entrypoint selects:
-    #   "simulation"  — system_simulation[_with_route_planner].launch.py (default)
     #   "unity_sim"   — same launch file as simulation, but also starts the Unity exe
     #                   (crashes at startup if the Unity binary is missing)
     #   "hardware"    — system_real_robot[_with_route_planner].launch.py
     #   "bagfile"     — system_bagfile[_with_route_planner].launch.py + use_sim_time
     # Setting bagfile_path automatically forces mode to "bagfile".
-    mode: str = "simulation"
+    mode: str = "hardware"
     bagfile_path: str = ""  # container-side path to bag; plays with --clock
 
     def __post_init__(self) -> None:
+        import os
+
         effective_mode = "bagfile" if self.bagfile_path else self.mode
         self.docker_env["MODE"] = effective_mode
         if self.bagfile_path:
             self.docker_env["BAGFILE_PATH"] = self.bagfile_path
+
+        # Pass host DISPLAY through for X11 forwarding (RViz, Unity)
+        if display := os.environ.get("DISPLAY"):
+            self.docker_env["DISPLAY"] = display
+
+        repo_root = Path(__file__).parent.parent.parent
         self.docker_volumes += [
             # Mount live dimos source so the module is always up-to-date
-            (str(Path(__file__).parent.parent.parent), "/workspace/dimos", "rw"),
+            (str(repo_root), "/workspace/dimos", "rw"),
             # Mount entrypoint script so changes don't require a rebuild
             (
                 str(Path(__file__).parent / "dimos_module_entrypoint.sh"),
                 "/usr/local/bin/dimos_module_entrypoint.sh",
                 "ro",
             ),
-            # Mount Unity environment (map.ply, traversable_area.ply, etc.) into the ROS workspace, TODO: this should be in the dockerfile
+            # Mount DDS config (fastdds.xml) from host — matches docker-compose ./config mount
+            (str(repo_root / "docker" / "navigation" / "config"), "/ros2_ws/config", "rw"),
+            # Mount Unity environment (map.ply, traversable_area.ply, etc.) into the ROS workspace
             (
                 str(
-                    Path(__file__).parent.parent.parent
+                    repo_root
                     / "docker"
                     / "navigation"
                     / "ros-navigation-autonomy-stack"
@@ -163,9 +176,9 @@ class ROSNavConfig(DockerModuleConfig):
                     / "unity"
                 ),
                 "/ros2_ws/src/base_autonomy/vehicle_simulator/mesh/unity",
-                "ro",
+                "rw",
             ),
-            # X11 socket so Unity can use the host display (same as docker-compose sim service)
+            # X11 socket for display forwarding (RViz, Unity)
             ("/tmp/.X11-unix", "/tmp/.X11-unix", "rw"),
         ]
 
@@ -173,6 +186,11 @@ class ROSNavConfig(DockerModuleConfig):
         xauth = Path.home() / ".Xauthority"
         if xauth.exists():
             self.docker_volumes.append((str(xauth), "/root/.Xauthority", "rw"))
+
+        # Mount bagfiles directory for bagfile mode
+        bagfiles_dir = repo_root / "docker" / "navigation" / "bagfiles"
+        if bagfiles_dir.exists():
+            self.docker_volumes.append((str(bagfiles_dir), "/ros2_ws/bagfiles", "rw"))
 
 
 class ROSNav(

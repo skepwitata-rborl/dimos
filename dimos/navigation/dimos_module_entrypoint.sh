@@ -35,7 +35,7 @@ source /opt/ros/${ROS_DISTRO:-humble}/setup.bash
 source /ros2_ws/install/setup.bash
 source /opt/dimos-venv/bin/activate
 rosspy
-' > /usr/bin/upp
+' > /usr/bin/rosspy
 chmod +x /usr/bin/rosspy
 
 # ── Git safe directories ──────────────────────────────────────────────────
@@ -99,6 +99,8 @@ if [ "$MODE" = "unity_sim" ]; then
         echo "[entrypoint] Build or download the Unity environment and place it at that path."
         exit 1
     fi
+else
+    echo "[entrypoint] not running Unity simulator"
 fi
 
 # ── Select and launch ROS navigation stack ────────────────────────────────
