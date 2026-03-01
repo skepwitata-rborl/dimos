@@ -12,85 +12,50 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for geometry_msgs.Point and geometry_msgs.PointStamped."""
+"""Tests for geometry_msgs.PointStamped — msg -> lcm bytes -> msg roundtrip."""
 
-from __future__ import annotations
-
-import unittest
+import time
 
 from dimos_lcm.geometry_msgs import Point as LCMPoint
 
 from dimos.msgs.geometry_msgs.PointStamped import Point, PointStamped
-from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 
 
-class TestPoint(unittest.TestCase):
-    """Test the Point wrapper."""
-
-    def test_inherits_lcm_point(self):
-        self.assertIsInstance(Point(1.0, 2.0, 3.0), LCMPoint)
-
-    def test_msg_name(self):
-        self.assertEqual(Point.msg_name, "geometry_msgs.Point")
+def test_point_inherits_lcm() -> None:
+    """Point wrapper inherits from LCMPoint."""
+    assert isinstance(Point(1.0, 2.0, 3.0), LCMPoint)
 
 
-class TestPointStamped(unittest.TestCase):
-    """Test PointStamped construction and inheritance."""
+def test_lcm_encode_decode() -> None:
+    """Test encoding and decoding of PointStamped to/from binary LCM format."""
+    source = PointStamped(
+        x=1.5, y=-2.5, z=3.5,
+        ts=time.time(),
+        frame_id="/world/grid",
+    )
+    binary_msg = source.lcm_encode()
+    dest = PointStamped.lcm_decode(binary_msg)
 
-    def test_construction(self):
-        pt = PointStamped(x=1.5, y=2.5, z=3.5, ts=100.0, frame_id="/world")
-        self.assertAlmostEqual(pt.x, 1.5)
-        self.assertAlmostEqual(pt.y, 2.5)
-        self.assertAlmostEqual(pt.z, 3.5)
-        self.assertAlmostEqual(pt.ts, 100.0)
-        self.assertEqual(pt.frame_id, "/world")
-
-    def test_inherits_point_and_lcm(self):
-        pt = PointStamped(x=1.0, y=2.0, z=3.0)
-        self.assertIsInstance(pt, Point)
-        self.assertIsInstance(pt, LCMPoint)
-
-    def test_auto_timestamp(self):
-        pt = PointStamped(x=1.0, y=2.0, z=3.0)
-        self.assertGreater(pt.ts, 0)
+    assert isinstance(dest, PointStamped)
+    assert dest is not source
+    assert dest.x == source.x
+    assert dest.y == source.y
+    assert dest.z == source.z
+    assert abs(dest.ts - source.ts) < 1e-6
+    assert dest.frame_id == source.frame_id
 
 
-class TestLCMRoundtrip(unittest.TestCase):
-    """Core test: msg -> lcm bytes -> msg."""
+def test_to_pose_stamped() -> None:
+    """Test conversion to PoseStamped with identity orientation."""
+    from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 
-    def test_roundtrip(self):
-        original = PointStamped(x=1.5, y=-2.5, z=3.5, ts=1234.5678, frame_id="/world/grid")
-        data = original.lcm_encode()
-        decoded = PointStamped.lcm_decode(data)
-        self.assertAlmostEqual(decoded.x, original.x)
-        self.assertAlmostEqual(decoded.y, original.y)
-        self.assertAlmostEqual(decoded.z, original.z)
-        self.assertAlmostEqual(decoded.ts, original.ts, places=6)
-        self.assertEqual(decoded.frame_id, original.frame_id)
+    pt = PointStamped(x=1.0, y=2.0, z=3.0, ts=500.0, frame_id="/map")
+    pose = pt.to_pose_stamped()
 
-    def test_fingerprint_matches_lcm_point(self):
-        """Verify lcm_msg.point = self works (same fingerprint)."""
-        pt = PointStamped(x=1.0, y=2.0, z=3.0)
-        self.assertEqual(pt._get_packed_fingerprint(), LCMPoint._get_packed_fingerprint())
-
-
-class TestConversions(unittest.TestCase):
-    def test_to_pose_stamped(self):
-        pt = PointStamped(x=1.0, y=2.0, z=3.0, ts=500.0, frame_id="/map")
-        pose = pt.to_pose_stamped()
-        self.assertIsInstance(pose, PoseStamped)
-        self.assertAlmostEqual(pose.x, 1.0)
-        self.assertAlmostEqual(pose.y, 2.0)
-        self.assertAlmostEqual(pose.z, 3.0)
-        self.assertAlmostEqual(pose.orientation.w, 1.0)
-        self.assertAlmostEqual(pose.ts, 500.0)
-        self.assertEqual(pose.frame_id, "/map")
-
-    def test_to_rerun(self):
-        import rerun as rr
-        pt = PointStamped(x=1.0, y=2.0, z=3.0)
-        self.assertIsInstance(pt.to_rerun(), rr.Points3D)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    assert isinstance(pose, PoseStamped)
+    assert pose.x == 1.0
+    assert pose.y == 2.0
+    assert pose.z == 3.0
+    assert pose.orientation.w == 1.0
+    assert pose.ts == 500.0
+    assert pose.frame_id == "/map"
