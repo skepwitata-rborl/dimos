@@ -27,9 +27,10 @@ DimOS may run on older hardware (e.g., NVIDIA 3000-series GPUs), but performance
 
 ## Storage
 
-- **50GB+ free disk space**
+- **10GB+ free disk space** (library install)
 - SSD strongly recommended for model loading and data logging
-- 100GB+ recommended if running multiple models or recording datasets
+- 25GB+ recommended for developer mode (full git history includes LFS assets)
+- 50GB+ if recording datasets or running multiple large models
 
 ## Operating System
 

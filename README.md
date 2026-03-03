@@ -136,7 +136,7 @@ Dimensional is agent native -- "vibecode" your robots in natural language and bu
 | GPU | NVIDIA RTX 3000+ (8GB VRAM) | RTX 4070+ (12GB+ VRAM) |
 | CPU | 8-core Intel/AMD | 12+ cores |
 | RAM | 16 GB | 32 GB+ |
-| Disk | 50 GB SSD | 100 GB+ SSD |
+| Disk | 10 GB SSD | 25 GB+ SSD |
 | OS | Ubuntu 22.04, macOS 12.6+ | Ubuntu 24.04 |
 
 > GPU is optional for basic robot control. Required for perception, VLMs, and AI features.
