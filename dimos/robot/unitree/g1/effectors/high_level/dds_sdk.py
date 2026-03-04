@@ -279,7 +279,8 @@ class G1HighLevelDdsSdk(Module, HighLevelG1Spec):
                     logger.warning(
                         f"Robot is in '{current_mode}' mode. "
                         "If SDK commands don't work, you may need to activate "
-                        "via controller: L1+A then L1+UP"
+                        "via controller: L1+A then L1+UP "
+                        "(for chinese L2+B then L2+up then R2+A)"
                     )
         except Exception as e:
             logger.debug(f"Could not check current mode: {e}")
