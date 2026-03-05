@@ -100,7 +100,13 @@ fi
 
 if [ ! -d "unity_models" ]; then
     echo -e "${YELLOW}Using office_building_1 as the Unity environment...${NC}"
-    tar -xf ../../data/.lfs/office_building_1.tar.gz
+    LFS_ASSET="../../data/.lfs/office_building_1.tar.gz"
+    # If the file is still a Git LFS pointer (not yet downloaded), fetch it now.
+    if file "$LFS_ASSET" | grep -q "ASCII text"; then
+        echo -e "${YELLOW}office_building_1.tar.gz is an LFS pointer — fetching via git lfs...${NC}"
+        git -C "$(realpath ../../)" lfs pull --include="data/.lfs/office_building_1.tar.gz"
+    fi
+    tar -xf "$LFS_ASSET"
     mv office_building_1 unity_models
 fi
 
