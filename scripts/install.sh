@@ -13,8 +13,6 @@
 #
 set -euo pipefail
 
-# Ensure we're in a valid directory (CWD may have been deleted by uninstall)
-cd "$HOME" 2>/dev/null || cd /tmp
 
 # ─── signal handling (must be early so Ctrl+C works everywhere) ────────────────
 trap 'printf "\n"; exit 130' INT
