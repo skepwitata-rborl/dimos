@@ -42,7 +42,6 @@ class RunEntry:
     log_dir: str
     cli_args: list[str] = field(default_factory=list)
     config_overrides: dict[str, object] = field(default_factory=dict)
-    mcp_port: int = 9990
     grpc_port: int = 9877
 
     @property
@@ -120,10 +119,10 @@ def cleanup_stale() -> int:
     return removed
 
 
-def check_port_conflicts(mcp_port: int = 9990, grpc_port: int = 9877) -> RunEntry | None:
-    """Check if any alive run is using our ports. Returns conflicting entry or None."""
+def check_port_conflicts(grpc_port: int = 9877) -> RunEntry | None:
+    """Check if any alive run is using the gRPC port. Returns conflicting entry or None."""
     for entry in list_runs(alive_only=True):
-        if entry.mcp_port == mcp_port or entry.grpc_port == grpc_port:
+        if entry.grpc_port == grpc_port:
             return entry
     return None
 

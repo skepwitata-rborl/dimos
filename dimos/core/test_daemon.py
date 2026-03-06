@@ -49,7 +49,6 @@ def tmp_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 def _make_entry(
     run_id: str = "20260306-120000-test",
     pid: int | None = None,
-    mcp_port: int = 9990,
     grpc_port: int = 9877,
 ) -> RunEntry:
     return RunEntry(
@@ -60,7 +59,6 @@ def _make_entry(
         log_dir="/tmp/test-logs",
         cli_args=["test"],
         config_overrides={},
-        mcp_port=mcp_port,
         grpc_port=grpc_port,
     )
 
@@ -76,7 +74,6 @@ class TestRunEntryCRUD:
         assert loaded.run_id == entry.run_id
         assert loaded.pid == entry.pid
         assert loaded.blueprint == entry.blueprint
-        assert loaded.mcp_port == entry.mcp_port
         assert loaded.grpc_port == entry.grpc_port
 
         entry.remove()
@@ -148,32 +145,25 @@ class TestPortConflicts:
     """Port conflict detection."""
 
     def test_port_conflict_detection(self, tmp_registry: Path):
-        entry = _make_entry(pid=os.getpid(), mcp_port=9990, grpc_port=9877)
+        entry = _make_entry(pid=os.getpid(), grpc_port=9877)
         entry.save()
 
-        conflict = check_port_conflicts(mcp_port=9990, grpc_port=9877)
+        conflict = check_port_conflicts(grpc_port=9877)
         assert conflict is not None
         assert conflict.run_id == entry.run_id
 
-    def test_port_conflict_mcp_only(self, tmp_registry: Path):
-        entry = _make_entry(pid=os.getpid(), mcp_port=9990, grpc_port=1111)
-        entry.save()
-
-        conflict = check_port_conflicts(mcp_port=9990, grpc_port=2222)
-        assert conflict is not None
-
     def test_port_conflict_grpc_only(self, tmp_registry: Path):
-        entry = _make_entry(pid=os.getpid(), mcp_port=1111, grpc_port=9877)
+        entry = _make_entry(pid=os.getpid(), grpc_port=9877)
         entry.save()
 
-        conflict = check_port_conflicts(mcp_port=2222, grpc_port=9877)
+        conflict = check_port_conflicts(grpc_port=9877)
         assert conflict is not None
 
     def test_port_conflict_no_false_positive(self, tmp_registry: Path):
-        entry = _make_entry(pid=os.getpid(), mcp_port=8000, grpc_port=8001)
+        entry = _make_entry(pid=os.getpid(), grpc_port=8001)
         entry.save()
 
-        conflict = check_port_conflicts(mcp_port=9990, grpc_port=9877)
+        conflict = check_port_conflicts(grpc_port=9877)
         assert conflict is None
 
 
@@ -284,7 +274,7 @@ class TestHealthCheckPartialDeath:
 # Daemon tests
 # ---------------------------------------------------------------------------
 
-from dimos.core.daemon import _shutdown_handler, daemonize, install_signal_handlers
+from dimos.core.daemon import daemonize, install_signal_handlers
 
 
 class TestDaemonize:
@@ -313,10 +303,13 @@ class TestSignalHandler:
         assert entry.registry_path.exists()
 
         coord = mock.MagicMock()
-        install_signal_handlers(entry, coord)
+        with mock.patch("signal.signal") as mock_signal:
+            install_signal_handlers(entry, coord)
+            # Capture the handler closure registered for SIGTERM
+            handler = mock_signal.call_args_list[0][0][1]
 
         with pytest.raises(SystemExit):
-            _shutdown_handler(signal.SIGTERM, None)
+            handler(signal.SIGTERM, None)
 
         # Registry file should be cleaned up
         assert not entry.registry_path.exists()
@@ -329,10 +322,12 @@ class TestSignalHandler:
 
         coord = mock.MagicMock()
         coord.stop.side_effect = RuntimeError("boom")
-        install_signal_handlers(entry, coord)
+        with mock.patch("signal.signal") as mock_signal:
+            install_signal_handlers(entry, coord)
+            handler = mock_signal.call_args_list[0][0][1]
 
         with pytest.raises(SystemExit):
-            _shutdown_handler(signal.SIGTERM, None)
+            handler(signal.SIGTERM, None)
 
         # Entry still removed even if stop() throws
         assert not entry.registry_path.exists()

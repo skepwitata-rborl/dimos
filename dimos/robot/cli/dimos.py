@@ -111,19 +111,19 @@ def run(
     from datetime import datetime, timezone
     import os
 
+    logger.info("Starting DimOS")
+
     from dimos.core.blueprints import autoconnect
     from dimos.core.run_registry import (
-        LOG_BASE_DIR,
         RunEntry,
         check_port_conflicts,
         cleanup_stale,
         generate_run_id,
     )
     from dimos.robot.get_all_blueprints import get_by_name
-    from dimos.utils.logging_config import setup_exception_handler
+    from dimos.utils.logging_config import set_run_log_dir, setup_exception_handler
 
     setup_exception_handler()
-    logger.info("Starting DimOS")
 
     cli_config_overrides: dict[str, Any] = ctx.obj
     global_config.update(**cli_config_overrides)
@@ -169,14 +169,13 @@ def run(
             coordinator.stop()
             raise typer.Exit(1)
 
-        n_workers = len(coordinator._client.workers) if coordinator._client else 0
-        n_modules = len(coordinator._deployed_modules)
+        n_workers = coordinator.n_workers
+        n_modules = coordinator.n_modules
         typer.echo(f"✓ All modules started ({n_modules} modules, {n_workers} workers)")
         typer.echo("✓ Health check passed")
         typer.echo("✓ DimOS running in background\n")
         typer.echo(f"  Run ID:    {run_id}")
         typer.echo(f"  Log:       {log_dir}")
-        typer.echo("  MCP:       http://localhost:9990/mcp\n")
         typer.echo("  Stop:      dimos stop")
         typer.echo("  Status:    dimos status")
 
@@ -213,74 +212,45 @@ def run(
 
 @main.command()
 def status() -> None:
-    """Show running DimOS instances."""
+    """Show the running DimOS instance."""
+    from datetime import datetime, timezone
 
-    from dimos.core.run_registry import list_runs
+    from dimos.core.run_registry import get_most_recent
 
-    entries = list_runs(alive_only=True)
-    if not entries:
-        typer.echo("No running DimOS instances")
+    entry = get_most_recent(alive_only=True)
+    if not entry:
+        typer.echo("No running DimOS instance")
         return
 
-    for entry in entries:
-        # Calculate uptime
-        try:
-            from datetime import datetime, timezone
+    try:
+        started = datetime.fromisoformat(entry.started_at)
+        age = datetime.now(timezone.utc) - started
+        hours, remainder = divmod(int(age.total_seconds()), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        uptime = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m {seconds}s"
+    except Exception:
+        uptime = "unknown"
 
-            started = datetime.fromisoformat(entry.started_at)
-            age = datetime.now(timezone.utc) - started
-            hours, remainder = divmod(int(age.total_seconds()), 3600)
-            minutes, seconds = divmod(remainder, 60)
-            if hours > 0:
-                uptime = f"{hours}h {minutes}m"
-            else:
-                uptime = f"{minutes}m {seconds}s"
-        except Exception:
-            uptime = "unknown"
-
-        typer.echo(f"  Run ID:    {entry.run_id}")
-        typer.echo(f"  PID:       {entry.pid}")
-        typer.echo(f"  Blueprint: {entry.blueprint}")
-        typer.echo(f"  Uptime:    {uptime}")
-        typer.echo(f"  Log:       {entry.log_dir}")
-        typer.echo(f"  MCP:       http://localhost:{entry.mcp_port}/mcp")
-        if len(entries) > 1:
-            typer.echo("")
+    typer.echo(f"  Run ID:    {entry.run_id}")
+    typer.echo(f"  PID:       {entry.pid}")
+    typer.echo(f"  Blueprint: {entry.blueprint}")
+    typer.echo(f"  Uptime:    {uptime}")
+    typer.echo(f"  Log:       {entry.log_dir}")
 
 
 @main.command()
 def stop(
-    pid: int = typer.Option(None, "--pid", "-p", help="PID of instance to stop"),
-    all_instances: bool = typer.Option(False, "--all", "-a", help="Stop all instances"),
     force: bool = typer.Option(False, "--force", "-f", help="Force kill (SIGKILL)"),
 ) -> None:
-    """Stop a running DimOS instance."""
+    """Stop the running DimOS instance."""
 
-    from dimos.core.run_registry import RunEntry, get_most_recent, list_runs
+    from dimos.core.run_registry import get_most_recent
 
-    if all_instances:
-        entries = list_runs(alive_only=True)
-        if not entries:
-            typer.echo("No running DimOS instances")
-            return
-        for e in entries:
-            _stop_entry(e, force=force)
-        return
+    entry = get_most_recent(alive_only=True)
+    if not entry:
+        typer.echo("No running DimOS instance", err=True)
+        raise typer.Exit(1)
 
-    entry: RunEntry | None = None
-    if pid:
-        entries = list_runs(alive_only=True)
-        entry = next((e for e in entries if e.pid == pid), None)
-        if not entry:
-            typer.echo(f"Error: no running instance with PID {pid}", err=True)
-            raise typer.Exit(1)
-    else:
-        entry = get_most_recent(alive_only=True)
-        if not entry:
-            typer.echo("No running DimOS instances", err=True)
-            raise typer.Exit(1)
-
-    assert entry is not None
     _stop_entry(entry, force=force)
 
 
@@ -316,6 +286,11 @@ def _stop_entry(entry, force: bool = False) -> None:  # type: ignore[no-untyped-
                 os.kill(entry.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+            else:
+                for _ in range(20):  # up to 2s for SIGKILL to be processed
+                    if not is_pid_alive(entry.pid):
+                        break
+                    time.sleep(0.1)
 
     entry.remove()
     typer.echo("  Stopped.")

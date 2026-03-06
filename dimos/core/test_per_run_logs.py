@@ -23,8 +23,12 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
-    """Remove DIMOS_RUN_LOG_DIR from env between tests."""
+    """Remove DIMOS_RUN_LOG_DIR from env and reset module globals between tests."""
+    from dimos.utils import logging_config
+
     monkeypatch.delenv("DIMOS_RUN_LOG_DIR", raising=False)
+    monkeypatch.setattr(logging_config, "_RUN_LOG_DIR", None)
+    monkeypatch.setattr(logging_config, "_LOG_FILE_PATH", None)
 
 
 class TestSetRunLogDir:

@@ -131,27 +131,18 @@ def daemonize(log_dir: Path) -> None:
 # Signal handler for clean shutdown
 # ---------------------------------------------------------------------------
 
-_active_entry: RunEntry | None = None
-_active_coordinator: ModuleCoordinator | None = None
-
 
 def install_signal_handlers(entry: RunEntry, coordinator: ModuleCoordinator) -> None:
     """Install SIGTERM/SIGINT handlers that stop the coordinator and clean the registry."""
-    global _active_entry, _active_coordinator
-    _active_entry = entry
-    _active_coordinator = coordinator
 
-    signal.signal(signal.SIGTERM, _shutdown_handler)
-    signal.signal(signal.SIGINT, _shutdown_handler)
-
-
-def _shutdown_handler(signum: int, frame: object) -> None:
-    logger.info("Received signal, shutting down", signal=signum)
-    if _active_coordinator is not None:
+    def _shutdown(signum: int, frame: object) -> None:
+        logger.info("Received signal, shutting down", signal=signum)
         try:
-            _active_coordinator.stop()
+            coordinator.stop()
         except Exception:
             logger.error("Error during coordinator stop", exc_info=True)
-    if _active_entry is not None:
-        _active_entry.remove()
-    sys.exit(0)
+        entry.remove()
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)

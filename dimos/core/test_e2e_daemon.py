@@ -38,7 +38,6 @@ from dimos.core.daemon import health_check
 from dimos.core.global_config import global_config
 from dimos.core.module import Module
 from dimos.core.run_registry import (
-    REGISTRY_DIR,
     RunEntry,
     cleanup_stale,
     get_most_recent,
@@ -96,13 +95,14 @@ def _make_entry(coord, run_id: str | None = None) -> RunEntry:
 
 
 @pytest.fixture(autouse=True)
-def _clean_registry():
-    """Remove any leftover registry entries before/after each test."""
-    for f in REGISTRY_DIR.glob("*.json"):
-        f.unlink(missing_ok=True)
-    yield
-    for f in REGISTRY_DIR.glob("*.json"):
-        f.unlink(missing_ok=True)
+def _clean_registry(tmp_path, monkeypatch):
+    """Redirect registry to a temp dir for test isolation."""
+    import dimos.core.run_registry as _reg
+
+    test_dir = tmp_path / "runs"
+    test_dir.mkdir()
+    monkeypatch.setattr(_reg, "REGISTRY_DIR", test_dir)
+    yield test_dir
 
 
 # ---------------------------------------------------------------------------

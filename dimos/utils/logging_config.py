@@ -59,11 +59,13 @@ def set_run_log_dir(log_dir: str | Path) -> None:
     # Migrate existing FileHandlers to the new path
     for logger_name in list(logging.Logger.manager.loggerDict):
         logger_obj = logging.getLogger(logger_name)
-        for handler in logger_obj.handlers:
+        for i, handler in enumerate(logger_obj.handlers):
             if isinstance(handler, logging.FileHandler) and handler.baseFilename != str(new_path):
                 handler.close()
-                handler.baseFilename = str(new_path)
-                handler.stream = handler._open()
+                new_handler = logging.FileHandler(new_path, mode="a", encoding="utf-8")
+                new_handler.setLevel(handler.level)
+                new_handler.setFormatter(handler.formatter)
+                logger_obj.handlers[i] = new_handler
 
 
 def get_run_log_dir() -> Path | None:

@@ -49,6 +49,18 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
         self._global_config = cfg
         self._deployed_modules = {}
 
+    @property
+    def n_workers(self) -> int:
+        """Number of active workers."""
+        if self._client is None:
+            return 0
+        return len(self._client.workers)
+
+    @property
+    def n_modules(self) -> int:
+        """Number of deployed modules."""
+        return len(self._deployed_modules)
+
     def start(self) -> None:
         n = self._n if self._n is not None else 2
         self._client = WorkerManager(n_workers=n)
