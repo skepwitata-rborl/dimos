@@ -76,6 +76,7 @@ class HelloDockerModule(Module["HelloDockerConfig"]):
             ["/usr/games/cowsay", text],
             capture_output=True,
             text=True,
+            check=True,
         )
         return result.stdout
 

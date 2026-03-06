@@ -137,31 +137,6 @@ def _is_container_running(cfg: DockerModuleConfig, name: str) -> bool:
     return r.returncode == 0 and r.stdout.strip() == "true"
 
 
-def _container_started_at(cfg: DockerModuleConfig, name: str) -> float | None:
-    """Return the container's start time as a Unix timestamp, or None on failure."""
-    r = _run(
-        [_docker_bin(cfg), "inspect", "-f", "{{.State.StartedAt}}", name],
-        timeout=DOCKER_STATUS_TIMEOUT,
-    )
-    if r.returncode != 0:
-        return None
-    from datetime import datetime
-
-    try:
-        # Docker returns RFC 3339 with nanoseconds, e.g. "2024-01-02T03:04:05.123456789Z"
-        raw = r.stdout.strip()
-        # Truncate nanoseconds to microseconds for fromisoformat compatibility
-        if "." in raw:
-            base, frac = raw.split(".", 1)
-            frac = frac.rstrip("Z")[:6]
-            raw = f"{base}.{frac}+00:00"
-        else:
-            raw = raw.rstrip("Z") + "+00:00"
-        return datetime.fromisoformat(raw).timestamp()
-    except (ValueError, OSError):
-        return None
-
-
 def _tail_logs(cfg: DockerModuleConfig, name: str, n: int = LOG_TAIL_LINES) -> str:
     r = _run([_docker_bin(cfg), "logs", "--tail", str(n), name], timeout=DOCKER_CMD_TIMEOUT)
     out = (r.stdout or "").rstrip()
@@ -250,18 +225,9 @@ class DockerModule(ModuleProxyProtocol):
             reconnect = False
             if _is_container_running(config, self._container_name):
                 if config.docker_reconnect_container:
-                    # Verify the container hasn't restarted since we last ran
-                    container_start = _container_started_at(config, self._container_name)
-                    process_start = time.time()  # conservative: current time as upper bound
-                    if container_start is not None and container_start > process_start - 5:
-                        logger.warning(
-                            f"Container {self._container_name} appears to have restarted recently "
-                            f"(started at {container_start:.0f}). Treating as fresh start."
-                        )
-                    else:
-                        logger.info(f"Reconnecting to running container: {self._container_name}")
-                        reconnect = True
-                if not reconnect:
+                    logger.info(f"Reconnecting to running container: {self._container_name}")
+                    reconnect = True
+                else:
                     logger.info(f"Stopping existing container: {self._container_name}")
                     _run(
                         [_docker_bin(config), "stop", self._container_name],
@@ -284,7 +250,7 @@ class DockerModule(ModuleProxyProtocol):
             self._wait_for_rpc()
         except Exception:
             with suppress(Exception):
-                self.stop()
+                self._cleanup()
             raise
 
     def get_rpc_method_names(self) -> list[str]:
@@ -319,6 +285,10 @@ class DockerModule(ModuleProxyProtocol):
             return
         with suppress(Exception):
             self.rpc.call_nowait(f"{self.remote_name}/stop", ([], {}))
+        self._cleanup()
+
+    def _cleanup(self) -> None:
+        """Release all resources. Safe to call multiple times or from partial init."""
         with suppress(Exception):
             self.rpc.stop()
         for unsub in self._unsub_fns:
