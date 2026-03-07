@@ -28,6 +28,8 @@ from typing import (
 
 import numpy as np
 import reactivex.operators as ops
+from rich.console import Console
+from rich.text import Text
 
 from dimos.types.timestamped import Timestamped
 
@@ -62,6 +64,14 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 R = TypeVar("R")
+
+_console = Console(force_terminal=True, highlight=False)
+
+
+def _render_text(text: Text) -> str:
+    with _console.capture() as cap:
+        _console.print(text, end="")
+    return cap.get()
 
 
 class StreamBackend(Protocol):
@@ -124,6 +134,27 @@ class Stream(Generic[T]):
         head = f'{cls}[{type_name}]("{name}")'
         query_str = str(self._query)
         return f"{head} | {query_str}" if query_str else head
+
+    def _rich_text(self) -> Text:
+        t = Text()
+        cls = type(self).__name__
+        type_name = self._payload_type.__name__ if self._payload_type else "?"
+        name = self._backend.stream_name if self._backend else "unbound"
+        t.append(cls, style="bold cyan")
+        t.append("[", style="dim")
+        t.append(type_name, style="yellow")
+        t.append("]", style="dim")
+        t.append("(", style="dim")
+        t.append(f'"{name}"', style="green")
+        t.append(")", style="dim")
+        query_text = self._query._rich_text()
+        if query_text.plain:
+            t.append(" | ", style="dim")
+            t.append_text(query_text)
+        return t
+
+    def __str__(self) -> str:
+        return _render_text(self._rich_text())
 
     def _with_filter(self, f: Filter) -> Self:
         return self._clone(filters=(*self._query.filters, f))
@@ -477,6 +508,34 @@ class TransformStream(Stream[R]):
         head = f"TransformStream[{type_name}]({self._source!r} -> {xf_name}{flag_str})"
         query_str = str(self._query)
         return f"{head} | {query_str}" if query_str else head
+
+    def _rich_text(self) -> Text:
+        t = Text()
+        type_name = self._transformer.output_type.__name__ if self._transformer.output_type else "?"
+        xf_name = type(self._transformer).__name__
+        t.append("TransformStream", style="bold cyan")
+        t.append("[", style="dim")
+        t.append(type_name, style="yellow")
+        t.append("]", style="dim")
+        t.append("(", style="dim")
+        t.append_text(self._source._rich_text())
+        t.append(" -> ", style="dim")
+        t.append(xf_name, style="magenta")
+        if self._live:
+            t.append(", ", style="dim")
+            t.append("live=True", style="yellow")
+        if self._backfill_only:
+            t.append(", ", style="dim")
+            t.append("backfill_only=True", style="yellow")
+        t.append(")", style="dim")
+        query_text = self._query._rich_text()
+        if query_text.plain:
+            t.append(" | ", style="dim")
+            t.append_text(query_text)
+        return t
+
+    def __str__(self) -> str:
+        return _render_text(self._rich_text())
 
     def fetch(self) -> ObservationSet[R]:
         """Execute transform in memory, collecting results."""
