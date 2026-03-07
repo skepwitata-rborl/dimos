@@ -81,8 +81,8 @@ def e2e_db(clip: CLIPModel) -> Generator[tuple[SqliteStore, Any], None, None]:
         print(f"Using cached DB ({DB_PATH})")
 
     yield store, session  # type: ignore[misc]
-    session.close()
-    store.close()
+    session.stop()
+    store.stop()
 
 
 @pytest.fixture(scope="module")

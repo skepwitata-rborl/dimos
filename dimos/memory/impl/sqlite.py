@@ -939,7 +939,7 @@ class SqliteSession(Session):
 
         return target
 
-    def close(self) -> None:
+    def stop(self) -> None:
         for s in self._streams.values():
             if s._backend is not None:
                 s._backend.appended_subject.on_completed()
@@ -1048,5 +1048,5 @@ class SqliteStore(Store):
         except ImportError:
             pass
 
-    def close(self) -> None:
+    def stop(self) -> None:
         self._closed = True

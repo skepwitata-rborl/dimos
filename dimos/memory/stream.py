@@ -26,6 +26,8 @@ from typing import (
 import numpy as np
 import reactivex.operators as ops
 
+from dimos.types.timestamped import Timestamped
+
 from .types import (
     AfterFilter,
     AtFilter,
@@ -132,6 +134,8 @@ class Stream(Generic[T]):
         tags: dict[str, Any] | None = None,
         parent_id: int | None = None,
     ) -> Observation:
+        if ts is None and isinstance(payload, Timestamped):
+            ts = payload.ts
         backend = self._require_backend()
         return backend.do_append(payload, ts, pose, tags, parent_id)
 

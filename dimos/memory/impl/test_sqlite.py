@@ -281,16 +281,16 @@ class TestTextStorage:
         store1 = SqliteStore(db_path)
         s1 = store1.session()
         s1.stream("logs", str).append("hello world", ts=1.0)
-        s1.close()
-        store1.close()
+        s1.stop()
+        store1.stop()
 
         store2 = SqliteStore(db_path)
         s2 = store2.session()
         rows = s2.stream("logs", str).fetch()
         assert len(rows) == 1
         assert rows[0].data == "hello world"
-        s2.close()
-        store2.close()
+        s2.stop()
+        store2.stop()
 
 
 class TestTextEmbeddingTransformer:
@@ -1116,13 +1116,13 @@ class TestStoreReopen:
         store1 = SqliteStore(db_path)
         s1 = store1.session()
         s1.stream("data", Image).append(images[0], ts=1.0)
-        s1.close()
-        store1.close()
+        s1.stop()
+        store1.stop()
 
         store2 = SqliteStore(db_path)
         s2 = store2.session()
         rows = s2.stream("data", Image).fetch()
         assert len(rows) == 1
         assert _img_close(rows[0].data, images[0])
-        s2.close()
-        store2.close()
+        s2.stop()
+        store2.stop()

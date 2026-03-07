@@ -16,8 +16,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import cv2
 
@@ -33,22 +33,12 @@ if TYPE_CHECKING:
     from reactivex.observable import Observable
 
     from dimos.core.stream import In
-    from dimos.memory.store import Session
     from dimos.memory.stream import Stream
     from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 
+T = TypeVar("T")
+
 logger = setup_logger()
-
-
-@dataclass
-class RecordSpec:
-    """Declares an input stream to record."""
-
-    input_name: str
-    stream_name: str
-    payload_type: type | None = None
-    fps: float = 0
-    """Target FPS. If >0, uses sharpness_barrier to select best frame per window."""
 
 
 @dataclass
@@ -56,7 +46,6 @@ class MemoryModuleConfig(ModuleConfig):
     db_path: str = "memory.db"
     world_frame: str = "world"
     robot_frame: str = "base_link"
-    records: list[RecordSpec] = field(default_factory=list)
 
 
 class MemoryModule(Module[MemoryModuleConfig]):
@@ -65,9 +54,6 @@ class MemoryModule(Module[MemoryModuleConfig]):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._store: SqliteStore | None = None
-        self._session: Session | None = None
-
-    # ── Lifecycle ─────────────────────────────────────────────────────
 
     def pose(self) -> PoseStamped | None:
         return self.tf.get_pose(self.config.world_frame, self.config.robot_frame)  # type: ignore[no-any-return]
@@ -76,67 +62,39 @@ class MemoryModule(Module[MemoryModuleConfig]):
     def start(self) -> None:
         super().start()
         self._store = SqliteStore(self.config.db_path)
-        self._session = self._store.session()
-        self._disposables.add(self._session)
-
-        # Auto-record streams declared in config
-        for spec in self.config.records:
-            input_stream: In[Any] = getattr(self, spec.input_name)
-            self.record(
-                input_stream,
-                spec.stream_name,
-                spec.payload_type,
-                fps=spec.fps,
-            )
-
+        self._disposables.add(self._store)
         logger.info("MemoryModule started (db=%s)", self.config.db_path)
 
-    def record(
+    def memory(
         self,
-        input: In[Any],
-        name: str,
-        payload_type: type | None = None,
+        input: In[T],
+        name: str | None = None,  # can be infered from input
+        payload_type: type | None = None,  #  can be infered from input
         fps: float = 0,
-    ) -> Stream[Any]:
+    ) -> Stream[T]:
         assert self._store is not None, "record() called before start()"
+
+        if name is None:
+            name = input.name
+        if payload_type is None:
+            payload_type = input.type
+
         session = self._store.session()
         self._disposables.add(session)
-        stream = session.stream(name, payload_type, pose_provider=self.pose)
+
+        memory_stream = session.stream(name, payload_type, pose_provider=self.pose)
 
         obs: Observable[Any] = input.observable()
         if fps > 0:
             obs = obs.pipe(sharpness_barrier(fps))
 
-        def _on_item(item: Any) -> None:
-            stream.append(item, ts=getattr(item, "ts", None))
+        self._disposables.add(obs.subscribe(on_next=memory_stream.append))
 
-        self._disposables.add(obs.subscribe(on_next=_on_item))
-
-        return stream
+        return memory_stream
 
     @rpc
     def stop(self) -> None:
-        self._session = None
-        super().stop()  # disposes all sessions via CompositeDisposable
-        if self._store is not None:
-            self._store.close()
-            self._store = None
-
-    # ── Public API ────────────────────────────────────────────────────
-
-    @property
-    def session(self) -> Session:
-        if self._session is None:
-            raise RuntimeError("MemoryModule not started")
-        return self._session
-
-    @rpc
-    def get_stats(self) -> dict[str, int]:
-        if self._session is None:
-            return {}
-        return {s.name: s.count for s in self._session.list_streams()}
+        super().stop()
 
 
-memory_module = MemoryModule.blueprint
-memory_module = MemoryModule.blueprint
 memory_module = MemoryModule.blueprint

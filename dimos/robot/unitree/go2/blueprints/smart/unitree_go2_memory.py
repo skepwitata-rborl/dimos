@@ -15,56 +15,53 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from dimos.core.blueprints import autoconnect
 from dimos.core.core import rpc
 from dimos.memory.module import MemoryModule, MemoryModuleConfig
-from dimos.msgs.sensor_msgs import Image, PointCloud2
+from dimos.memory.transformer import EmbeddingTransformer
+from dimos.models.embedding.clip import CLIPModel
 from dimos.robot.unitree.go2.blueprints.smart.unitree_go2 import unitree_go2
 
 if TYPE_CHECKING:
     from dimos.core.stream import In
+    from dimos.memory.stream import Stream
+    from dimos.models.embedding.base import Embedding
+    from dimos.msgs.sensor_msgs import Image, PointCloud2
 
 
 @dataclass
 class UnitreeGo2MemoryConfig(MemoryModuleConfig):
     image_fps: float = 5.0
-    enable_clip: bool = False
 
 
 class UnitreeGo2Memory(MemoryModule):
     color_image: In[Image]
     lidar: In[PointCloud2]
-
     config: UnitreeGo2MemoryConfig  # type: ignore[assignment]
     default_config: type[UnitreeGo2MemoryConfig] = UnitreeGo2MemoryConfig
 
     @rpc
     def start(self) -> None:
         super().start()
-        self._images = self.record(self.color_image, "images", Image, fps=self.config.image_fps)
-        if self.lidar._transport is not None:
-            self._pointclouds = self.record(self.lidar, "pointclouds", PointCloud2)
 
-        if self.config.enable_clip:
-            self._setup_clip_pipeline()
+        self.image_memory: Stream[Image] = self.memory(
+            self.color_image,
+        )
 
-    def _setup_clip_pipeline(self) -> None:
-        from dimos.memory.transformer import EmbeddingTransformer
-        from dimos.models.embedding.clip import CLIPModel
+        self.pointcloud_memory: Stream[PointCloud2] = self.memory(self.lidar)
 
         clip = CLIPModel()
         clip.start()
+        self._disposables.add(clip)
 
-        self._embeddings: Any = self._images.transform(EmbeddingTransformer(clip), live=True).store(
-            "clip_embeddings"
-        )
+        self.image_embeddings: Stream[Embedding] = self.image_memory.transform(
+            EmbeddingTransformer(clip), live=True
+        ).store("clip_embeddings")
 
 
 unitree_go2_memory = autoconnect(
     unitree_go2,
     UnitreeGo2Memory.blueprint(),
 ).global_config(n_workers=8)
-
-__all__ = ["UnitreeGo2Memory", "unitree_go2_memory"]

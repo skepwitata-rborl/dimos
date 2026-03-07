@@ -97,8 +97,8 @@ class TestE2EPipeline:
         print(f"Time-filtered search: {len(filtered)} results after ts={mid_ts:.2f}")
 
         # 6. Verify persistence — reopen and search again
-        session.close()
-        store.close()
+        session.stop()
+        store.stop()
 
         store2 = SqliteStore(str(tmp_path / "e2e.db"))
         session2 = store2.session()
@@ -109,5 +109,5 @@ class TestE2EPipeline:
         assert len(results2) > 0
         print(f"After reopen: {len(results2)} results")
 
-        session2.close()
-        store2.close()
+        session2.stop()
+        store2.stop()
