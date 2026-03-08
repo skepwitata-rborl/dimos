@@ -126,6 +126,10 @@ class Session(Resource):
     def list_streams(self) -> list[Stream[Any]]: ...
 
     @abstractmethod
+    def delete_stream(self, name: str) -> None:
+        """Drop a stream and all its associated tables (payload, rtree, etc.)."""
+
+    @abstractmethod
     def materialize_transform(
         self,
         name: str,

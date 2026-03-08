@@ -404,6 +404,13 @@ class Stream(Generic[T]):
     def exists(self) -> bool:
         return self.count() > 0
 
+    def delete(self) -> None:
+        """Drop this stream and all associated storage."""
+        if self._session is None:
+            raise TypeError("Cannot delete: no session available.")
+        backend = self._require_backend()
+        self._session.delete_stream(backend.stream_name)
+
     def get_time_range(self) -> tuple[float, float]:
         return (self.first().ts, self.last().ts)
 
@@ -498,16 +505,18 @@ class EmbeddingStream(Stream[T]):
         from dimos.models.embedding.base import Embedding as EmbeddingCls
 
         resolve = model or self._embedding_model
+        label: str | None = None
         if isinstance(query, str):
             if resolve is None:
                 raise TypeError(
                     "No embedding model available. Pass model= or use a "
                     "pre-computed Embedding / list[float]."
                 )
+            label = query
             emb = resolve.embed_text(query)
             if isinstance(emb, list):
                 emb = emb[0]
-            return self.search_embedding(emb, k=k)
+            query = emb
 
         if isinstance(query, EmbeddingCls):
             vec = query.to_numpy().tolist()
@@ -520,17 +529,23 @@ class EmbeddingStream(Stream[T]):
                     "No embedding model available. Pass model= or use a "
                     "pre-computed Embedding / list[float]."
                 )
+            label = type(query).__name__
             emb = resolve.embed(query)
             if isinstance(emb, list):
                 emb = emb[0]
-            return self.search_embedding(emb, k=k)
+            query = emb
+            vec = query.to_numpy().tolist()
 
-        return self._with_filter(EmbeddingSearchFilter(vec, k))
+        return self._with_filter(EmbeddingSearchFilter(vec, k, label=label))
 
     def fetch(self) -> ObservationSet[T]:  # type: ignore[override]
         backend = self._require_backend()
         results = backend.execute_fetch(self._query)
-        return ObservationSet(cast("list[Observation[T]]", results), session=self._session)
+        return ObservationSet(
+            cast("list[Observation[T]]", results),
+            session=self._session,
+            payload_type=self._payload_type,
+        )
 
     def first(self) -> EmbeddingObservation:  # type: ignore[override]
         results = self.limit(1).fetch()

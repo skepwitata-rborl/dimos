@@ -871,6 +871,17 @@ class SqliteSession(Session):
                 result.append(self.stream(name, payload_type or object))
         return result
 
+    def delete_stream(self, name: str) -> None:
+        _validate_identifier(name)
+        for suffix in ("_vec", "_fts", "_rtree", "_payload", ""):
+            table = f"{name}{suffix}"
+            # Virtual tables (rtree, fts, vec) need DROP TABLE, not DROP TABLE IF EXISTS
+            # on some builds, but IF EXISTS is safe for all.
+            self._conn.execute(f"DROP TABLE IF EXISTS {table}")
+        self._conn.execute("DELETE FROM _streams WHERE name = ?", (name,))
+        self._conn.commit()
+        self._streams.pop(name, None)
+
     def materialize_transform(
         self,
         name: str,

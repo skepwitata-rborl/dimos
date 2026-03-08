@@ -203,17 +203,26 @@ class TagsFilter:
 class EmbeddingSearchFilter:
     query: list[float]
     k: int
+    label: str | None = None
 
     def matches(self, obs: Observation[Any]) -> bool:
         return True  # top-k handled as special pass in ListBackend
 
     def __str__(self) -> str:
-        return f"search(k={self.k})"
+        parts = [f"k={self.k}"]
+        if self.label:
+            parts.insert(0, repr(self.label))
+        return f"search_embedding({', '.join(parts)})"
 
     def _rich_text(self) -> Text:
         t = Text()
-        t.append("search", style="cyan")
-        t.append(f"(k={self.k})")
+        t.append("search_embedding", style="cyan")
+        t.append("(")
+        if self.label:
+            t.append(repr(self.label), style="green")
+            t.append(", ")
+        t.append(f"k={self.k}")
+        t.append(")")
         return t
 
 
