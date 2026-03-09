@@ -15,11 +15,11 @@ from __future__ import annotations
 
 import ctypes
 import multiprocessing as mp
+from pathlib import Path
 import platform
 import sys
 import threading
 import traceback
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from dimos.utils.logging_config import setup_logger

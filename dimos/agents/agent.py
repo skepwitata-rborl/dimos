@@ -166,7 +166,9 @@ def _get_tools_from_modules(
 
 
 def _skill_to_tool(agent: Agent, skill: SkillInfo, rpc: RPCSpec) -> StructuredTool:
-    rpc_call = RpcCall(None, rpc, skill.func_name, skill.class_name, [], timeout=RPCClient.default_rpc_timeout)
+    rpc_call = RpcCall(
+        None, rpc, skill.func_name, skill.class_name, [], timeout=RPCClient.default_rpc_timeout
+    )
 
     def wrapped_func(*args: Any, **kwargs: Any) -> str | list[dict[str, Any]]:
         result = None

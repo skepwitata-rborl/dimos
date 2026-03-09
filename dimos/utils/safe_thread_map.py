@@ -13,8 +13,8 @@
 # limitations under the License.
 from __future__ import annotations
 
-import os
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+import os
 from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:

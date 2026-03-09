@@ -185,7 +185,14 @@ class McpServer(Module):
         assert self.rpc is not None
         app.state.skills = [skill for module in modules for skill in (module.get_skills() or [])]
         app.state.rpc_calls = {
-            skill.func_name: RpcCall(None, self.rpc, skill.func_name, skill.class_name, [], timeout=RPCClient.default_rpc_timeout)
+            skill.func_name: RpcCall(
+                None,
+                self.rpc,
+                skill.func_name,
+                skill.class_name,
+                [],
+                timeout=RPCClient.default_rpc_timeout,
+            )
             for skill in app.state.skills
         }
 
