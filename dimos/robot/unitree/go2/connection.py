@@ -16,7 +16,7 @@ import logging
 import sys
 from threading import Thread
 import time
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol
 
 from pydantic import Field
 from reactivex.disposable import Disposable
