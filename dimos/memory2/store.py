@@ -17,7 +17,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
-from dimos.core.resource import Resource
+from dimos.core.resource import CompositeResource
 from dimos.memory2.stream import Stream
 
 if TYPE_CHECKING:
@@ -70,13 +70,14 @@ class StreamNamespace:
         return f"StreamNamespace({list(self._session._streams.keys())})"
 
 
-class Session(Resource):
+class Session(CompositeResource):
     """A session against a store. Manages named streams over a shared connection.
 
     Subclasses implement ``_create_backend`` to provide storage-specific backends.
     """
 
     def __init__(self) -> None:
+        super().__init__()
         self._streams: dict[str, Stream[Any]] = {}
         self._backends: dict[str, Backend[Any]] = {}
 
@@ -105,21 +106,9 @@ class Session(Resource):
     def streams(self) -> StreamNamespace:
         return StreamNamespace(self)
 
-    def start(self) -> None:
-        pass
 
-    def stop(self) -> None:
-        pass
-
-
-class Store(Resource):
+class Store(CompositeResource):
     """Top-level entry point — wraps a storage location (file, URL, etc.)."""
 
     @abstractmethod
     def session(self) -> Session: ...
-
-    def start(self) -> None:
-        pass
-
-    def stop(self) -> None:
-        pass

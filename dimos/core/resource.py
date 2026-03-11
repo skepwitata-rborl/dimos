@@ -17,6 +17,7 @@ from __future__ import annotations
 from abc import abstractmethod
 
 from reactivex.abc import DisposableBase
+from reactivex.disposable import CompositeDisposable
 
 
 class Resource(DisposableBase):
@@ -54,3 +55,23 @@ class Resource(DisposableBase):
 
     def __exit__(self, *args: object) -> None:
         self.stop()
+
+
+class CompositeResource(Resource):
+    """Resource that owns child disposables, disposed on stop()."""
+
+    _disposables: CompositeDisposable
+
+    def __init__(self) -> None:
+        self._disposables = CompositeDisposable()
+
+    def own(self, *disposables: DisposableBase) -> None:
+        """Register child disposables to be disposed when this resource stops."""
+        for d in disposables:
+            self._disposables.add(d)
+
+    def start(self) -> None:
+        pass
+
+    def stop(self) -> None:
+        self._disposables.dispose()
