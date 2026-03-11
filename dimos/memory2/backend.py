@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Protocol, TypeVar, runtime_checkable
+from typing import TYPE_CHECKING, Generic, Protocol, TypeVar, runtime_checkable
 
 from dimos.core.resource import Resource
 
@@ -38,10 +38,15 @@ class Backend(Protocol[T]):
 
     The backend is fully responsible for applying query filters.
     How it does so (SQL, R-tree, Python predicates) is its business.
+
+    Every backend supports live mode via a built-in ``LiveChannel``.
     """
 
     @property
     def name(self) -> str: ...
+
+    @property
+    def live_channel(self) -> LiveChannel[T]: ...
 
     def iterate(self, query: StreamQuery) -> Iterator[Observation[T]]: ...
 
@@ -56,11 +61,28 @@ class Backend(Protocol[T]):
     def count(self, query: StreamQuery) -> int: ...
 
 
-@runtime_checkable
-class LiveBackend(Backend[T], Protocol[T]):
-    """Backend that also supports live subscriptions."""
+# ── Live notification channel ────────────────────────────────────
 
-    def subscribe(self, buf: BackpressureBuffer[Observation[T]]) -> DisposableBase: ...
+
+class LiveChannel(ABC, Generic[T]):
+    """Push-notification channel for live observation delivery.
+
+    Decouples the notification mechanism from storage.  The built-in
+    ``SubjectChannel`` handles same-session fan-out (thread-safe, zero
+    config).  External implementations (Redis pub/sub, Postgres
+    LISTEN/NOTIFY, inotify) can be injected for cross-process use.
+    """
+
+    @abstractmethod
+    def subscribe(self, buf: BackpressureBuffer[Observation[T]]) -> DisposableBase:
+        """Register *buf* to receive new observations. Returns a
+        disposable that unsubscribes when disposed."""
+        ...
+
+    @abstractmethod
+    def notify(self, obs: Observation[T]) -> None:
+        """Fan out *obs* to all current subscribers."""
+        ...
 
 
 # ── Blob storage ──────────────────────────────────────────────────

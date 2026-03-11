@@ -17,8 +17,7 @@ from __future__ import annotations
 import threading
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from reactivex.disposable import Disposable
-
+from dimos.memory2.livechannel.subject import SubjectChannel
 from dimos.memory2.store import Session, Store
 
 if TYPE_CHECKING:
@@ -26,7 +25,7 @@ if TYPE_CHECKING:
 
     from reactivex.abc import DisposableBase
 
-    from dimos.memory2.backend import Backend
+    from dimos.memory2.backend import Backend, LiveChannel
     from dimos.memory2.buffer import BackpressureBuffer
     from dimos.memory2.filter import StreamQuery
     from dimos.memory2.type import Observation
@@ -42,23 +41,23 @@ class ListBackend(Generic[T]):
         self._observations: list[Observation[T]] = []
         self._next_id = 0
         self._lock = threading.Lock()
-        self._subscribers: list[BackpressureBuffer[Observation[T]]] = []
+        self._channel: SubjectChannel[T] = SubjectChannel()
 
     @property
     def name(self) -> str:
         return self._name
+
+    @property
+    def live_channel(self) -> LiveChannel[T]:
+        return self._channel
 
     def append(self, obs: Observation[T]) -> Observation[T]:
         with self._lock:
             obs.id = self._next_id
             self._next_id += 1
             self._observations.append(obs)
-            subs = list(self._subscribers)
 
-        # Notify outside lock to avoid deadlocks
-        for buf in subs:
-            buf.put(obs)
-
+        self._channel.notify(obs)
         return obs
 
     def iterate(self, query: StreamQuery) -> Iterator[Observation[T]]:
@@ -72,7 +71,7 @@ class ListBackend(Generic[T]):
         buf = query.live_buffer
         if buf is not None:
             # Subscribe BEFORE backfill to avoid missing items
-            sub = self.subscribe(buf)
+            sub = self._channel.subscribe(buf)
             return self._iterate_live(query, buf, sub)
         return self._iterate_snapshot(query)
 
@@ -112,19 +111,6 @@ class ListBackend(Generic[T]):
     def count(self, query: StreamQuery) -> int:
         return sum(1 for _ in self.iterate(query))
 
-    def subscribe(self, buf: BackpressureBuffer[Observation[T]]) -> DisposableBase:
-        with self._lock:
-            self._subscribers.append(buf)
-
-        def _unsubscribe() -> None:
-            with self._lock:
-                try:
-                    self._subscribers.remove(buf)
-                except ValueError:
-                    pass
-
-        return Disposable(action=_unsubscribe)
-
 
 class MemorySession(Session):
     """In-memory session. Each stream is backed by a ListBackend."""
@@ -132,9 +118,15 @@ class MemorySession(Session):
     def _create_backend(self, name: str, payload_type: type[Any] | None = None) -> Backend[Any]:
         return ListBackend(name)
 
+    def list_streams(self) -> list[str]:
+        return list(self._streams.keys())
+
+    def delete_stream(self, name: str) -> None:
+        self._streams.pop(name, None)
+
 
 class MemoryStore(Store):
     """In-memory store for experimentation."""
 
-    def session(self) -> MemorySession:
-        return MemorySession()
+    def session(self, **kwargs: Any) -> MemorySession:
+        return MemorySession(**kwargs)

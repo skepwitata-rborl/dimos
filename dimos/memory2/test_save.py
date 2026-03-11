@@ -12,24 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for Stream.save() and LiveBackend protocol split."""
+"""Tests for Stream.save() and LiveChannel integration."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import pytest
 
-from dimos.memory2.backend import Backend, LiveBackend
+from dimos.memory2.backend import Backend, LiveChannel
 from dimos.memory2.impl.memory import ListBackend
 from dimos.memory2.stream import Stream
 from dimos.memory2.transform import FnTransformer
 from dimos.memory2.type import Observation
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-
-    from dimos.memory2.filter import StreamQuery
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -41,65 +34,19 @@ def make_stream(n: int = 5, start_ts: float = 0.0) -> Stream[int]:
     return Stream(source=backend)
 
 
-class ReadOnlyBackend:
-    """A Backend that does NOT support live mode (no subscribe)."""
-
-    def __init__(self, name: str = "<readonly>") -> None:
-        self._name = name
-        self._obs: list[Observation[int]] = []
-        self._next_id = 0
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    def iterate(self, query: StreamQuery) -> Iterator[Observation[int]]:
-        yield from self._obs
-
-    def append(self, obs: Observation[int]) -> Observation[int]:
-        obs.id = self._next_id
-        self._next_id += 1
-        self._obs.append(obs)
-        return obs
-
-    def count(self, query: StreamQuery) -> int:
-        return len(self._obs)
-
-
 # ═══════════════════════════════════════════════════════════════════
 #  Protocol checks
 # ═══════════════════════════════════════════════════════════════════
 
 
-class TestProtocolSplit:
-    def test_list_backend_is_live(self) -> None:
-        b = ListBackend[int]("x")
-        assert isinstance(b, LiveBackend)
-
+class TestProtocol:
     def test_list_backend_is_backend(self) -> None:
         b = ListBackend[int]("x")
         assert isinstance(b, Backend)
 
-    def test_readonly_is_backend(self) -> None:
-        b = ReadOnlyBackend()
-        assert isinstance(b, Backend)
-
-    def test_readonly_is_not_live(self) -> None:
-        b = ReadOnlyBackend()
-        assert not isinstance(b, LiveBackend)
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  .live() rejects non-LiveBackend
-# ═══════════════════════════════════════════════════════════════════
-
-
-class TestLiveRejectsNonLive:
-    def test_live_rejects_non_live_backend(self) -> None:
-        b = ReadOnlyBackend("ro")
-        s = Stream(source=b)
-        with pytest.raises(TypeError, match="does not support live mode"):
-            s.live()
+    def test_list_backend_has_live_channel(self) -> None:
+        b = ListBackend[int]("x")
+        assert isinstance(b.live_channel, LiveChannel)
 
 
 # ═══════════════════════════════════════════════════════════════════

@@ -59,7 +59,7 @@ def sqlite_session() -> Generator[Session, None, None]:
     from dimos.memory2.impl.sqlite import SqliteStore
 
     with tempfile.NamedTemporaryFile(suffix=".db") as f:
-        store = SqliteStore(f.name)
+        store = SqliteStore(path=f.name)
         with store.session() as session:
             yield session
 

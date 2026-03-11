@@ -28,11 +28,11 @@ Supporting Systems:
 | Module         | What                                                              |
 |----------------|-------------------------------------------------------------------|
 | `stream.py`    | Stream node — filters, transforms, terminals                      |
-| `backend.py`   | Backend / LiveBackend protocols, VectorStore / BlobStore ABCs     |
+| `backend.py`   | Backend protocol, LiveChannel / VectorStore / BlobStore ABCs     |
 | `filter.py`    | StreamQuery dataclass, filter types, Python query execution       |
 | `transform.py` | Transformer protocol, FnTransformer, QualityWindow                |
 | `buffer.py`    | Backpressure buffers for live mode (KeepLast, Bounded, Unbounded) |
-| `store.py`     | Store / Session base classes, StreamNamespace                     |
+| `store.py`     | Store / Session (Configurable), StoreConfig / SessionConfig      |
 | `type.py`      | Observation, EmbeddedObservation dataclasses                      |
 | `embed.py`     | EmbedImages / EmbedText transformers                              |
 
@@ -40,9 +40,10 @@ Supporting Systems:
 
 | Package      | What                                                 | Docs                                             |
 |--------------|------------------------------------------------------|--------------------------------------------------|
-| `impl/`      | Backend implementations (ListBackend, SqliteBackend) | [impl/README.md](impl/README.md)                 |
-| `blobstore/` | Pluggable blob storage (file, sqlite)                | e[blobstore/blobstore.md](blobstore/blobstore.md) |
-| `codecs/`    | Encode/decode for storage (pickle, JPEG, LCM)        | [codecs/README.md](codecs/README.md)             |
+| `impl/`         | Backend implementations (ListBackend, SqliteBackend) | [impl/README.md](impl/README.md)                 |
+| `livechannel/`  | Live notification channels (SubjectChannel)          |                                                  |
+| `blobstore/`    | Pluggable blob storage (file, sqlite)                | [blobstore/blobstore.md](blobstore/blobstore.md) |
+| `codecs/`       | Encode/decode for storage (pickle, JPEG, LCM)        | [codecs/README.md](codecs/README.md)             |
 
 ## Docs
 

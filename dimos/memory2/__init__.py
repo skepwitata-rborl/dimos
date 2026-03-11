@@ -1,4 +1,4 @@
-from dimos.memory2.backend import Backend, LiveBackend, VectorStore
+from dimos.memory2.backend import Backend, LiveChannel, VectorStore
 from dimos.memory2.buffer import (
     BackpressureBuffer,
     Bounded,
@@ -21,7 +21,8 @@ from dimos.memory2.filter import (
 )
 from dimos.memory2.impl.memory import ListBackend, MemorySession, MemoryStore
 from dimos.memory2.impl.sqlite import SqliteBackend, SqliteSession, SqliteStore
-from dimos.memory2.store import Session, Store, StreamNamespace
+from dimos.memory2.livechannel import SubjectChannel
+from dimos.memory2.store import Session, SessionConfig, Store, StoreConfig, StreamNamespace
 from dimos.memory2.stream import Stream
 from dimos.memory2.transform import FnTransformer, QualityWindow, Transformer
 from dimos.memory2.type import EmbeddedObservation, Observation
@@ -42,7 +43,7 @@ __all__ = [
     "FnTransformer",
     "KeepLast",
     "ListBackend",
-    "LiveBackend",
+    "LiveChannel",
     "MemorySession",
     "MemoryStore",
     "NearFilter",
@@ -50,13 +51,16 @@ __all__ = [
     "PredicateFilter",
     "QualityWindow",
     "Session",
+    "SessionConfig",
     "SqliteBackend",
     "SqliteSession",
     "SqliteStore",
     "Store",
+    "StoreConfig",
     "Stream",
     "StreamNamespace",
     "StreamQuery",
+    "SubjectChannel",
     "TagsFilter",
     "TimeRangeFilter",
     "Transformer",
