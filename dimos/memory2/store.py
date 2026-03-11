@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from dimos.memory2.backend import Backend, BlobStore, LiveChannel, VectorStore
+    from dimos.memory2.codecs.base import Codec
 
 T = TypeVar("T")
 
@@ -49,6 +50,8 @@ class SessionConfig:
     live_channel: LiveChannel[Any] | None = None
     blob_store: BlobStore | None = None
     vector_store: VectorStore | None = None
+    eager_blobs: bool = False
+    codec: Codec[Any] | None = None
 
 
 # ── Stream namespace ──────────────────────────────────────────────

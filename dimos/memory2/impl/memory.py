@@ -19,8 +19,10 @@ import threading
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from dimos.memory2.backend import BackendConfig
+from dimos.memory2.codecs.base import Codec, codec_for
 from dimos.memory2.livechannel.subject import SubjectChannel
 from dimos.memory2.store import Session, Store
+from dimos.memory2.type import _UNLOADED
 from dimos.protocol.service.spec import Configurable
 
 if TYPE_CHECKING:
@@ -41,13 +43,19 @@ class ListBackend(Configurable[BackendConfig], Generic[T]):
 
     default_config: type[BackendConfig] = BackendConfig
 
-    def __init__(self, name: str = "<memory>", **kwargs: Any) -> None:
+    def __init__(
+        self, name: str = "<memory>", payload_type: type[Any] | None = None, **kwargs: Any
+    ) -> None:
         super().__init__(**kwargs)
         self._name = name
         self._observations: list[Observation[T]] = []
         self._next_id = 0
         self._lock = threading.Lock()
         self._channel: LiveChannel[T] = self.config.live_channel or SubjectChannel()
+        # Resolve codec for blob store
+        self._codec: Codec[Any] | None = None
+        if self.config.blob_store is not None:
+            self._codec = self.config.codec or codec_for(payload_type)
 
     @property
     def name(self) -> str:
@@ -58,9 +66,23 @@ class ListBackend(Configurable[BackendConfig], Generic[T]):
         return self._channel
 
     def append(self, obs: Observation[T]) -> Observation[T]:
+        # Encode BEFORE lock (avoids holding lock during IO)
+        bs = self.config.blob_store
+        encoded: bytes | None = None
+        if bs is not None and self._codec is not None:
+            encoded = self._codec.encode(obs._data)
+
         with self._lock:
             obs.id = self._next_id
             self._next_id += 1
+            if encoded is not None:
+                assert bs is not None
+                bs.put(self._name, obs.id, encoded)
+                # Replace inline data with lazy loader
+                stream_name, key, codec = self._name, obs.id, self._codec
+                assert codec is not None
+                obs._data = _UNLOADED  # type: ignore[assignment]
+                obs._loader = lambda: codec.decode(bs.get(stream_name, key))
             self._observations.append(obs)
 
         # Delegate embedding to pluggable vector store
@@ -93,9 +115,16 @@ class ListBackend(Configurable[BackendConfig], Generic[T]):
             snapshot = list(self._observations)
 
         if query.search_vec is not None and self.config.vector_store is not None:
-            yield from self._vector_search(snapshot, query)
+            it = self._vector_search(snapshot, query)
         else:
-            yield from query.apply(iter(snapshot))
+            it = query.apply(iter(snapshot))
+
+        if self.config.eager_blobs and self.config.blob_store is not None:
+            for obs in it:
+                _ = obs.data  # trigger lazy loader
+                yield obs
+        else:
+            yield from it
 
     def _vector_search(
         self, snapshot: list[Observation[T]], query: StreamQuery
@@ -126,6 +155,8 @@ class ListBackend(Configurable[BackendConfig], Generic[T]):
     ) -> Iterator[Observation[T]]:
         from dimos.memory2.buffer import ClosedError
 
+        eager = self.config.eager_blobs and self.config.blob_store is not None
+
         # Backfill phase — use snapshot query (without live) for the backfill
         last_id = -1
         for obs in self._iterate_snapshot(query):
@@ -142,6 +173,8 @@ class ListBackend(Configurable[BackendConfig], Generic[T]):
                 last_id = obs.id
                 if filters and not all(f.matches(obs) for f in filters):
                     continue
+                if eager:
+                    _ = obs.data  # trigger lazy loader
                 yield obs
         except (ClosedError, StopIteration):
             sub.dispose()
@@ -156,7 +189,7 @@ class MemorySession(Session):
     def _create_backend(
         self, name: str, payload_type: type[Any] | None = None, **config: Any
     ) -> Backend[Any]:
-        return ListBackend(name, **config)
+        return ListBackend(name, payload_type=payload_type, **config)
 
     def list_streams(self) -> list[str]:
         return list(self._streams.keys())

@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from reactivex.abc import DisposableBase
 
     from dimos.memory2.buffer import BackpressureBuffer
+    from dimos.memory2.codecs.base import Codec
     from dimos.memory2.filter import StreamQuery
     from dimos.memory2.type import Observation
     from dimos.models.embedding.base import Embedding
@@ -47,6 +48,8 @@ class BackendConfig:
     live_channel: LiveChannel[Any] | None = None
     blob_store: BlobStore | None = None
     vector_store: VectorStore | None = None
+    eager_blobs: bool = False
+    codec: Codec[Any] | None = None
 
 
 @runtime_checkable
