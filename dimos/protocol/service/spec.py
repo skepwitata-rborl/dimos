@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 
 class BaseConfig(BaseModel):
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = {"arbitrary_types_allowed": True, "extra": "forbid"}
 
 
 # Generic type for service configuration
