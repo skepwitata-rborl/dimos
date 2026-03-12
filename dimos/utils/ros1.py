@@ -38,7 +38,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 import struct
 import time
-from typing import Any
 
 import numpy as np
 
@@ -317,81 +316,3 @@ def serialize_pose_stamped(
     w.f64(qz)
     w.f64(qw)
     return w.bytes()
-
-
-# ---------------------------------------------------------------------------
-# geometry_msgs/TwistStamped (serialize)
-# ---------------------------------------------------------------------------
-
-
-def serialize_twist_stamped(
-    linear_x: float,
-    linear_y: float,
-    linear_z: float,
-    angular_x: float,
-    angular_y: float,
-    angular_z: float,
-    frame_id: str = "base_link",
-    stamp: float | None = None,
-) -> bytes:
-    """Serialize geometry_msgs/TwistStamped in ROS1 wire format."""
-    w = ROS1Writer()
-    write_header(w, frame_id, stamp)
-    # Twist: linear (3x f64) + angular (3x f64)
-    w.f64(linear_x)
-    w.f64(linear_y)
-    w.f64(linear_z)
-    w.f64(angular_x)
-    w.f64(angular_y)
-    w.f64(angular_z)
-    return w.bytes()
-
-
-# ---------------------------------------------------------------------------
-# nav_msgs/Odometry (deserialize)
-# ---------------------------------------------------------------------------
-
-
-def deserialize_odometry(data: bytes) -> tuple[dict[str, Any], str, str, float] | None:
-    """Deserialize ROS1 nav_msgs/Odometry.
-
-    Returns (pose_dict, frame_id, child_frame_id, timestamp) or None.
-    pose_dict has keys: x, y, z, qx, qy, qz, qw, vx, vy, vz, wx, wy, wz
-    """
-    try:
-        r = ROS1Reader(data)
-        header = read_header(r)
-        child_frame_id = r.string()
-
-        # PoseWithCovariance: Pose (Point + Quaternion) + float64[36]
-        x, y, z = r.f64(), r.f64(), r.f64()
-        qx, qy, qz, qw = r.f64(), r.f64(), r.f64(), r.f64()
-        r.raw(36 * 8)  # skip covariance
-
-        # TwistWithCovariance: Twist (Vector3 + Vector3) + float64[36]
-        vx, vy, vz = r.f64(), r.f64(), r.f64()
-        wx, wy, wz = r.f64(), r.f64(), r.f64()
-        r.raw(36 * 8)  # skip covariance
-
-        return (
-            {
-                "x": x,
-                "y": y,
-                "z": z,
-                "qx": qx,
-                "qy": qy,
-                "qz": qz,
-                "qw": qw,
-                "vx": vx,
-                "vy": vy,
-                "vz": vz,
-                "wx": wx,
-                "wy": wy,
-                "wz": wz,
-            },
-            header.frame_id,
-            child_frame_id,
-            header.stamp,
-        )
-    except Exception:
-        return None

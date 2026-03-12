@@ -251,8 +251,6 @@ class UnityBridgeConfig(ModuleConfig):
     unity_extra_args: list[str] = field(default_factory=list)
 
     # Vehicle parameters
-    sensor_offset_x: float = 0.0
-    sensor_offset_y: float = 0.0
     vehicle_height: float = 0.75
 
     # Initial vehicle pose
@@ -637,6 +635,11 @@ class UnityBridgeModule(Module[UnityBridgeConfig]):
                     logger.warning(f"Image decode failed ({topic}): {e}")
 
     def _publish_camera_info(self, width: int, height: int, ts: float) -> None:
+        # NOTE: The Unity camera is a 360-degree cylindrical panorama (1920x640).
+        # CameraInfo assumes a pinhole model, so this is an approximation.
+        # The Rerun static pinhole (rerun_static_pinhole) uses a different focal
+        # length tuned for a 120-deg FOV window because Rerun has no cylindrical
+        # projection support. These intentionally differ.
         fx = fy = height / 2.0
         cx, cy = width / 2.0, height / 2.0
         self.camera_info.publish(
