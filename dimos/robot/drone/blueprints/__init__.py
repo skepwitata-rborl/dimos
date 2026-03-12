@@ -1,4 +1,5 @@
-# Copyright 2026 Dimensional Inc.
+#!/usr/bin/env python3
+# Copyright 2025-2026 Dimensional Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,19 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Temporal memory package."""
+"""DimOS Drone blueprints."""
 
-from .frame_window_accumulator import Frame, FrameWindowAccumulator
-from .temporal_memory import TemporalMemory, TemporalMemoryConfig, temporal_memory
-from .temporal_state import TemporalState
-from .window_analyzer import WindowAnalyzer
+import lazy_loader as lazy
 
-__all__ = [
-    "Frame",
-    "FrameWindowAccumulator",
-    "TemporalMemory",
-    "TemporalMemoryConfig",
-    "TemporalState",
-    "WindowAnalyzer",
-    "temporal_memory",
-]
+__getattr__, __dir__, __all__ = lazy.attach(
+    __name__,
+    submod_attrs={
+        "basic.drone_basic": ["drone_basic"],
+        "agentic.drone_agentic": ["drone_agentic"],
+    },
+)
