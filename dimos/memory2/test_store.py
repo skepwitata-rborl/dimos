@@ -422,39 +422,30 @@ class TestStandaloneComponents:
     def test_observation_store_standalone(self, tmp_path) -> None:
         from dimos.memory2.codecs.base import codec_for
         from dimos.memory2.observationstore.sqlite import SqliteObservationStore
+        from dimos.memory2.type.filter import StreamQuery
         from dimos.memory2.type.observation import Observation
 
         db = str(tmp_path / "obs.db")
         codec = codec_for(str)
-        store = SqliteObservationStore(path=db, name="events", codec=codec)
-        store.start()
-        try:
+        with SqliteObservationStore(path=db, name="events", codec=codec) as store:
             obs = Observation(id=0, ts=1.0, _data="hello")
             row_id = store.insert(obs)
             store.commit()
             assert row_id == 1
 
-            from dimos.memory2.type.filter import StreamQuery
-
             results = list(store.query(StreamQuery()))
             assert len(results) == 1
             assert results[0].ts == 1.0
-        finally:
-            store.stop()
 
     def test_blob_store_standalone(self, tmp_path) -> None:
         from dimos.memory2.blobstore.sqlite import SqliteBlobStore
 
         db = str(tmp_path / "blob.db")
-        store = SqliteBlobStore(path=db)
-        store.start()
-        try:
+        with SqliteBlobStore(path=db) as store:
             store.put("stream1", 1, b"data1")
             store.put("stream1", 2, b"data2")
             assert store.get("stream1", 1) == b"data1"
             assert store.get("stream1", 2) == b"data2"
-        finally:
-            store.stop()
 
     def test_vector_store_standalone(self, tmp_path) -> None:
         import numpy as np
@@ -463,9 +454,7 @@ class TestStandaloneComponents:
         from dimos.models.embedding.base import Embedding
 
         db = str(tmp_path / "vec.db")
-        store = SqliteVectorStore(path=db)
-        store.start()
-        try:
+        with SqliteVectorStore(path=db) as store:
             emb1 = Embedding(vector=np.array([1, 0, 0], dtype=np.float32))
             emb2 = Embedding(vector=np.array([0, 1, 0], dtype=np.float32))
             store.put("vecs", 1, emb1)
@@ -474,8 +463,6 @@ class TestStandaloneComponents:
             results = store.search("vecs", emb1, k=2)
             assert len(results) == 2
             assert results[0][0] == 1  # closest to emb1 is itself
-        finally:
-            store.stop()
 
     def test_conn_and_path_mutually_exclusive(self, tmp_path) -> None:
         import sqlite3
