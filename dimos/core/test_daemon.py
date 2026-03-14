@@ -205,10 +205,6 @@ class TestHealthCheck:
         assert coord.health_check() is False
 
 
-# ---------------------------------------------------------------------------
-# Daemon tests
-# ---------------------------------------------------------------------------
-
 from dimos.core.daemon import LaunchResult, install_signal_handlers
 from dimos.core.instance_registry import InstanceInfo, register
 

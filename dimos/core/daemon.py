@@ -63,18 +63,12 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
-
 @dataclass
 class LaunchResult:
     """Returned by launch_blueprint() with info about the launched instance."""
 
     instance_name: str
     run_dir: Path
-
-
-# ---------------------------------------------------------------------------
-# Public API: launch_blueprint
-# ---------------------------------------------------------------------------
 
 
 def launch_blueprint(
@@ -176,11 +170,6 @@ def launch_blueprint(
     return LaunchResult(instance_name=instance_name, run_dir=run_dir)
 
 
-# ---------------------------------------------------------------------------
-# Daemon entry point (runs in the SUBPROCESS, then double-forks)
-# ---------------------------------------------------------------------------
-
-
 def _daemon_main(run_dir: Path) -> None:
     """Read launch_params.json, double-fork, build blueprint, loop forever."""
     params = json.loads((run_dir / "launch_params.json").read_text())
@@ -201,7 +190,7 @@ def _daemon_main(run_dir: Path) -> None:
     if pid > 0:
         os._exit(0)
 
-    # --- DAEMON GRANDCHILD ---
+    # Daemon grandchild
     # Redirect stdin to /dev/null
     sys.stdout.flush()
     sys.stderr.flush()
@@ -297,19 +286,9 @@ def _daemon_main(run_dir: Path) -> None:
         os._exit(1)
 
 
-# ---------------------------------------------------------------------------
-# Health check (delegates to ModuleCoordinator.health_check)
-# ---------------------------------------------------------------------------
-
-
 def health_check(coordinator: ModuleCoordinator) -> bool:
     """Verify all coordinator workers are alive after build."""
     return coordinator.health_check()
-
-
-# ---------------------------------------------------------------------------
-# Attached tail (for CLI --daemon without --detach)
-# ---------------------------------------------------------------------------
 
 
 def attached_tail(stdout_log: Path, instance_name: str) -> int:
@@ -391,11 +370,6 @@ def attached_tail(stdout_log: Path, instance_name: str) -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------
-# Signal handler for clean shutdown
-# ---------------------------------------------------------------------------
-
-
 def install_signal_handlers(
     info: InstanceInfo,
     coordinator: ModuleCoordinator,
@@ -420,10 +394,6 @@ def install_signal_handlers(
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
 
-
-# ---------------------------------------------------------------------------
-# __main__ — entry point for: python -m dimos.core.daemon <run_dir>
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:

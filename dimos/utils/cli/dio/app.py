@@ -28,7 +28,7 @@ from textual.containers import Container, Horizontal
 from textual.widgets import RichLog, Static
 
 from dimos.utils.cli import theme
-from dimos.utils.cli.dio.sub_apps import get_sub_apps
+from dimos.utils.cli.dio.sub_apps.registry import get_sub_apps
 
 if TYPE_CHECKING:
     from textual.dom import DOMNode
@@ -111,10 +111,6 @@ class DIOApp(App[None]):
             pass
         return theme.DEFAULT_THEME
 
-    # ------------------------------------------------------------------
-    # Debug log
-    # ------------------------------------------------------------------
-
     def _dlog(self, msg: str) -> None:
         import re
 
@@ -134,10 +130,6 @@ class DIOApp(App[None]):
             except Exception:
                 pass
 
-    # ------------------------------------------------------------------
-    # Compose
-    # ------------------------------------------------------------------
-
     def compose(self) -> ComposeResult:
         yield Static("", id="hint-bar")
         with Container(id="sidebar"):
@@ -148,10 +140,6 @@ class DIOApp(App[None]):
                 yield Container(id=f"display-{p + 1}", classes="display-pane")
         if self._debug:
             yield RichLog(id="debug-log", markup=True, wrap=True, highlight=False)
-
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
 
     async def on_mount(self) -> None:
         self._instances = [cls() for cls in self._sub_app_classes]
@@ -188,10 +176,6 @@ class DIOApp(App[None]):
         for inst in self._instances:
             inst.on_unmount_subapp()
 
-    # ------------------------------------------------------------------
-    # Focus tracking — auto-update _focused_panel when focus moves
-    # ------------------------------------------------------------------
-
     def _panel_for_widget(self, widget: Widget | None) -> int | None:
         """Return which panel (0..N-1) contains the given widget, or None."""
         node: DOMNode | None = widget
@@ -205,10 +189,6 @@ class DIOApp(App[None]):
                     return None
             node = node.parent
         return None
-
-    # ------------------------------------------------------------------
-    # Click-to-focus panel
-    # ------------------------------------------------------------------
 
     async def on_click(self, event: Click) -> None:
         """Handle clicks on display panes (focus panel) and sidebar tabs (switch/focus sub-app)."""
@@ -252,10 +232,6 @@ class DIOApp(App[None]):
             f"[{theme.DEBUG_ACTION}]ACTION[/{theme.DEBUG_ACTION}] tab_click -> show {self._sub_app_classes[tab_idx].TITLE} in panel {self._focused_panel}"
         )
 
-    # ------------------------------------------------------------------
-    # Key logging
-    # ------------------------------------------------------------------
-
     def on_key(self, event: Key) -> None:
         focused = self.focused
         focused_name = type(focused).__name__ if focused else "None"
@@ -267,10 +243,6 @@ class DIOApp(App[None]):
             f"  focused=[{theme.DEBUG_FOCUS}]{focused_name}#{focused_id}[/{theme.DEBUG_FOCUS}]"
             f"  _focused_panel={self._focused_panel}  actual_panel={panel}"
         )
-
-    # ------------------------------------------------------------------
-    # Sync helpers
-    # ------------------------------------------------------------------
 
     def _refresh_panel_count(self) -> None:
         w = self.size.width
@@ -347,10 +319,6 @@ class DIOApp(App[None]):
         parts.append("Ctrl+Q/Esc: quit")
         bar.update(" | ".join(parts))
 
-    # ------------------------------------------------------------------
-    # Actions
-    # ------------------------------------------------------------------
-
     async def action_tab_prev(self) -> None:
         self._dlog(
             f"[{theme.DEBUG_ACTION}]ACTION[/{theme.DEBUG_ACTION}] tab_prev  panel={self._focused_panel} idx={self._panel_idx[: self._num_panels]}"
@@ -399,10 +367,6 @@ class DIOApp(App[None]):
     def action_quit_or_esc(self) -> None:
         self._dlog(f"[{theme.DEBUG_ACTION}]ACTION[/{theme.DEBUG_ACTION}] quit_or_esc")
         self._handle_quit_press()
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
 
     def _focus_panel(self, panel: int) -> None:
         old = self._focused_panel
@@ -480,10 +444,6 @@ class DIOApp(App[None]):
             self._quit_timer = None
         if self._initialized:
             self._sync_hint()
-
-    # ------------------------------------------------------------------
-    # Prompt hooks (with deduplication)
-    # ------------------------------------------------------------------
 
     # _pending_confirms maps message -> (event, result_list) so that
     # concurrent threads asking the same question share one modal.

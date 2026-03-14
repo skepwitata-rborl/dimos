@@ -37,11 +37,8 @@ import sys
 import threading
 from typing import Any
 
-# ---------------------------------------------------------------------------
-# Global hooks — set by the dio app when it is running so that prompts
+# Global hooks -- set by the dio app when it is running so that prompts
 # can route through the TUI instead of stdin.
-# ---------------------------------------------------------------------------
-
 _dio_confirm_hook: Any = None  # callable(message, default) -> bool | None
 _dio_sudo_hook: Any = None  # callable(message) -> bool | None
 _lock = threading.Lock()
@@ -70,11 +67,6 @@ def clear_dio_hook() -> None:
     with _lock:
         _dio_confirm_hook = None
         _dio_sudo_hook = None
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 
 def confirm(
@@ -171,11 +163,6 @@ def sudo_prompt(message: str = "sudo password required") -> bool:
         return False
 
     return _terminal_sudo(message)
-
-
-# ---------------------------------------------------------------------------
-# Terminal fallbacks
-# ---------------------------------------------------------------------------
 
 
 def _terminal_confirm(message: str, default: bool) -> bool:

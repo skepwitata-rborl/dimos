@@ -155,7 +155,7 @@ def run(
     cli_config_overrides: dict[str, Any] = ctx.obj
 
     if daemon or detach:
-        # --- DAEMON PATH: spawn + double-fork ---
+        # Daemon path: spawn + double-fork
         # launch_blueprint handles everything: config, existing instance,
         # run_dir creation, config snapshot, and spawning the daemon.
         from dimos.core.daemon import attached_tail, launch_blueprint
@@ -178,7 +178,7 @@ def run(
         typer.echo("  Stop:    dimos stop")
         raise typer.Exit(0)
     else:
-        # --- FOREGROUND PATH ---
+        # Foreground path
         from dimos.core.blueprints import autoconnect
         from dimos.robot.get_all_blueprints import get_by_name, get_module_by_name
         from dimos.utils.logging_config import set_run_log_dir, setup_exception_handler

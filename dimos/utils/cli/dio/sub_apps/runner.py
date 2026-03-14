@@ -267,10 +267,6 @@ class StatusSubApp(SubApp):
                 pass
         return super().get_focus_target()
 
-    # ------------------------------------------------------------------
-    # Instance picker
-    # ------------------------------------------------------------------
-
     def _rebuild_picker(self) -> None:
         """Rebuild the instance picker buttons from current entries."""
         picker = self.query_one("#instance-picker", Horizontal)
@@ -323,10 +319,6 @@ class StatusSubApp(SubApp):
             status = self.query_one("#runner-status", Static)
             status.update(f"Launching: {name}...")
 
-    # ------------------------------------------------------------------
-    # Launcher notification (immediate feedback)
-    # ------------------------------------------------------------------
-
     def on_launch_started(self, instance_name: str, run_dir: Path) -> None:
         """Called by launcher immediately after launch_blueprint() returns.
 
@@ -361,10 +353,6 @@ class StatusSubApp(SubApp):
 
         # Rebuild picker (may now show multiple entries)
         self._rebuild_picker()
-
-    # ------------------------------------------------------------------
-    # State management
-    # ------------------------------------------------------------------
 
     def _refresh_entries(self) -> None:
         """Update the list of running entries from the registry."""
@@ -556,10 +544,6 @@ class StatusSubApp(SubApp):
         status = self.query_one("#runner-status", Static)
         status.update("No blueprint running")
 
-    # ------------------------------------------------------------------
-    # Entry info formatting
-    # ------------------------------------------------------------------
-
     @staticmethod
     def _format_status_line(entry: Any) -> str:
         """One-line status bar summary including config overrides."""
@@ -592,10 +576,6 @@ class StatusSubApp(SubApp):
             lines.append(f"[dim]config overrides:[/dim] {items}")
         lines.append("")  # blank separator
         return lines
-
-    # ------------------------------------------------------------------
-    # Log streaming
-    # ------------------------------------------------------------------
 
     _LEVEL_STYLES: dict[str, str] = {
         "dbg": "bold cyan",
@@ -719,10 +699,6 @@ class StatusSubApp(SubApp):
 
         self._log_thread = threading.Thread(target=_follow, daemon=True)
         self._log_thread.start()
-
-    # ------------------------------------------------------------------
-    # Button handling
-    # ------------------------------------------------------------------
 
     def _is_click_on_log(self, event: Any) -> bool:
         """Return True if the click event is inside the runner-log RichLog."""
@@ -907,10 +883,6 @@ class StatusSubApp(SubApp):
         except ValueError:
             idx = 0
         buttons[idx].focus()
-
-    # ------------------------------------------------------------------
-    # Stop / restart / kill
-    # ------------------------------------------------------------------
 
     def _stop_running(self) -> None:
         if self._stopping:

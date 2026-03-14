@@ -59,10 +59,6 @@ def get(name: str, default: str = "#ffffff") -> str:
     return COLORS.get(name, default)
 
 
-# ---------------------------------------------------------------------------
-# Theme definitions
-# ---------------------------------------------------------------------------
-
 # Each entry maps custom CSS variable names (without ``$``) to hex values.
 # These are injected into Textual's CSS variable system via Theme.variables.
 # The keys here become ``$dio-bg``, ``$dio-dim``, etc. in CSS.
@@ -502,7 +498,7 @@ def get_textual_themes() -> list[object]:
     """Return a list of Textual ``Theme`` objects for all DimOS themes."""
     from textual.theme import Theme as TextualTheme
 
-    themes = []
+    themes: list[object] = []
     for name in THEME_NAMES:
         base = _THEME_BASES[name]
         variables = _THEME_VARIABLES[name]
@@ -520,10 +516,6 @@ def _vars_for(name: str) -> dict[str, str]:
     """Get the CSS variable dict for a theme by short name."""
     return _THEME_VARIABLES.get(name, _THEME_VARIABLES[DEFAULT_THEME])
 
-
-# ---------------------------------------------------------------------------
-# Active theme tracking + Python-level constants
-# ---------------------------------------------------------------------------
 
 active_theme: str = DEFAULT_THEME
 
@@ -611,10 +603,6 @@ def _apply_vars(v: dict[str, str]) -> None:
     _self.DEBUG_ACTION = v["dio-debug-action"]
     _self.DEBUG_FOCUS = v["dio-debug-focus"]
 
-
-# ---------------------------------------------------------------------------
-# Initial module-level constants (from dimos.tcss defaults)
-# ---------------------------------------------------------------------------
 
 # Base color palette
 BLACK = COLORS.get("black", "#0b0f0f")
