@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+# Copyright 2025-2026 Dimensional Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""G1 with SmartNav autonomous navigation on real hardware.
+
+Zero-ROS navigation stack: uses SmartNav C++ native modules for terrain
+analysis, local planning, and path following. FastLio2 provides SLAM
+(registered point clouds + odometry) from a Livox Mid-360 lidar.
+G1HighLevelDdsSdk sends velocity commands to the robot.
+
+Unlike the sim blueprint, this uses real hardware sensors instead of Unity,
+and sends cmd_vel to the actual robot effector.
+"""
+
+from __future__ import annotations
+
+import os
+from typing import Any
+
+from dimos.core.blueprints import autoconnect
+from dimos.hardware.sensors.lidar.fastlio2.module import FastLio2
+from dimos.navigation.smartnav.blueprints._rerun_helpers import (
+    goal_path_override,
+    path_override,
+    sensor_scan_override,
+    static_floor,
+    static_robot,
+    terrain_map_ext_override,
+    terrain_map_override,
+    waypoint_override,
+)
+from dimos.navigation.smartnav.modules.click_to_goal.click_to_goal import ClickToGoal
+from dimos.navigation.smartnav.modules.local_planner.local_planner import LocalPlanner
+from dimos.navigation.smartnav.modules.path_follower.path_follower import PathFollower
+from dimos.navigation.smartnav.modules.sensor_scan_generation.sensor_scan_generation import (
+    SensorScanGeneration,
+)
+from dimos.navigation.smartnav.modules.terrain_analysis.terrain_analysis import TerrainAnalysis
+from dimos.navigation.smartnav.modules.terrain_map_ext.terrain_map_ext import TerrainMapExt
+from dimos.protocol.pubsub.impl.lcmpubsub import LCM
+from dimos.robot.unitree.g1.effectors.high_level.dds_sdk import G1HighLevelDdsSdk
+from dimos.visualization.rerun.bridge import _resolve_viewer_mode, rerun_bridge
+
+
+def _rerun_blueprint() -> Any:
+    import rerun.blueprint as rrb
+
+    return rrb.Blueprint(
+        rrb.Spatial3DView(origin="world", name="3D"),
+    )
+
+
+_rerun_config = {
+    "blueprint": _rerun_blueprint,
+    "pubsubs": [LCM()],
+    "min_interval_sec": 0.25,
+    "visual_override": {
+        "world/sensor_scan": sensor_scan_override,
+        "world/terrain_map": terrain_map_override,
+        "world/terrain_map_ext": terrain_map_ext_override,
+        "world/path": path_override,
+        "world/way_point": waypoint_override,
+        "world/goal_path": goal_path_override,
+    },
+    "static": {
+        "world/floor": static_floor,
+        "world/tf/robot": static_robot,
+    },
+}
+
+unitree_g1_nav_onboard = (
+    autoconnect(
+        FastLio2.blueprint(
+            host_ip=os.getenv("LIDAR_HOST_IP", "192.168.1.5"),
+            lidar_ip=os.getenv("LIDAR_IP", "192.168.1.155"),
+        ),
+        SensorScanGeneration.blueprint(),
+        TerrainAnalysis.blueprint(
+            extra_args=[
+                "--obstacleHeightThre",
+                "0.2",
+                "--maxRelZ",
+                "1.5",
+            ]
+        ),
+        TerrainMapExt.blueprint(),
+        LocalPlanner.blueprint(
+            extra_args=[
+                "--autonomyMode",
+                "true",
+                "--maxSpeed",
+                "1.0",
+                "--autonomySpeed",
+                "1.0",
+                "--obstacleHeightThre",
+                "0.2",
+                "--maxRelZ",
+                "1.5",
+                "--minRelZ",
+                "-1.0",
+            ]
+        ),
+        PathFollower.blueprint(
+            extra_args=[
+                "--autonomyMode",
+                "true",
+                "--maxSpeed",
+                "1.0",
+                "--autonomySpeed",
+                "1.0",
+                "--maxAccel",
+                "2.0",
+                "--slowDwnDisThre",
+                "0.2",
+            ]
+        ),
+        ClickToGoal.blueprint(),
+        G1HighLevelDdsSdk.blueprint(),
+        rerun_bridge(viewer_mode=_resolve_viewer_mode(), **_rerun_config),
+    )
+    .remappings(
+        [
+            # FastLio2 outputs "lidar"; SmartNav modules expect "registered_scan"
+            (FastLio2, "lidar", "registered_scan"),
+        ]
+    )
+    .global_config(n_workers=8, robot_model="unitree_g1")
+)
+
+
+def main() -> None:
+    unitree_g1_nav_onboard.build().loop()
+
+
+__all__ = ["unitree_g1_nav_onboard"]
+
+if __name__ == "__main__":
+    main()
