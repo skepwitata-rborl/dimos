@@ -143,6 +143,7 @@ class TestImportReplay:
         assert "lidar" in streams
 
 
+@pytest.mark.tool
 class TestE2EQuery:
     """Query operations against real robot replay data."""
 

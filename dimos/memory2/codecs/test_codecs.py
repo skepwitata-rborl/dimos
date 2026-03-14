@@ -117,6 +117,7 @@ def _jpeg_eq(original: Any, decoded: Any) -> bool:
 
 def _jpeg_case() -> Case | None:
     try:
+        pytest.importorskip("turbojpeg")
         from dimos.memory2.codecs.jpeg import JpegCodec
         from dimos.utils.testing.replay import TimedSensorReplay
 
