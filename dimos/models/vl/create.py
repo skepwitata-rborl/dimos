@@ -1,6 +1,6 @@
 from typing import Any
 
-from dimos.core.types import VlModelName
+from dimos.models.vl.types import VlModelName
 from dimos.models.vl.base import VlModel
 
 

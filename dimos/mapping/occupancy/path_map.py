@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dimos.core.types import NavigationStrategy
+from dimos.mapping.occupancy.types import NavigationStrategy
 from dimos.mapping.occupancy.gradient import voronoi_gradient
 from dimos.mapping.occupancy.inflation import simple_inflate
 from dimos.mapping.occupancy.operations import overlay_occupied, smooth_occupied
