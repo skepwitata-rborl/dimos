@@ -27,7 +27,6 @@ from dimos.teleop.quest.quest_extensions import arm_teleop_module, visualizing_t
 from dimos.teleop.quest.quest_types import Buttons
 from dimos.visualization.rerun.bridge import rerun_bridge
 
-
 # Arm teleop with press-and-hold engage
 arm_teleop = autoconnect(
     arm_teleop_module(),
