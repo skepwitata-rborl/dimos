@@ -16,22 +16,22 @@
 from dimos.core.blueprints import autoconnect
 from dimos.robot.unitree.go2.blueprints.basic.unitree_go2_basic import unitree_go2_basic
 from dimos.robot.unitree.go2.blueprints.basic.unitree_go2_fleet import unitree_go2_fleet
-from dimos.teleop.phone.phone_extensions import teleop_phone_module
+from dimos.teleop.phone.phone_extensions import simple_phone_teleop_module
 
 # Simple phone teleop (mobile base axis filtering + cmd_vel output)
 teleop_phone = autoconnect(
-    teleop_phone_module(),
+    simple_phone_teleop_module(),
 )
 
 # Phone teleop wired to Unitree Go2
 teleop_phone_go2 = autoconnect(
-    teleop_phone_module(),
+    simple_phone_teleop_module(),
     unitree_go2_basic,
 )
 
 # Phone teleop wired to Go2 fleet — twist commands sent to all robots
 teleop_phone_go2_fleet = autoconnect(
-    teleop_phone_module(),
+    simple_phone_teleop_module(),
     unitree_go2_fleet,
 )
 
