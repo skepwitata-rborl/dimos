@@ -257,8 +257,9 @@ class NativeModule(Module[_NativeConfig]):
         # Check if rebuild needed due to source changes
         needs_rebuild = False
         if self.config.rebuild_on_change and exe.exists():
-            cache_name = f"native_{type(self).__name__}_build"
-            if did_change(cache_name, self.config.rebuild_on_change, cwd=self.config.cwd):
+            if did_change(
+                self._build_cache_name(), self.config.rebuild_on_change, cwd=self.config.cwd
+            ):
                 logger.info("Source files changed, triggering rebuild", executable=str(exe))
                 needs_rebuild = True
 
@@ -307,8 +308,7 @@ class NativeModule(Module[_NativeConfig]):
         # Seed the cache after a successful build so the next check has a baseline
         # (needed for the initial build when the pre-build change check was skipped)
         if self.config.rebuild_on_change:
-            cache_name = f"native_{type(self).__name__}_build"
-            did_change(cache_name, self.config.rebuild_on_change, cwd=self.config.cwd)
+            did_change(self._build_cache_name(), self.config.rebuild_on_change, cwd=self.config.cwd)
 
     def _collect_topics(self) -> dict[str, str]:
         """Extract LCM topic strings from blueprint-assigned stream transports."""
