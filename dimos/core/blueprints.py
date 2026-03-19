@@ -494,6 +494,7 @@ class Blueprint:
         self._connect_rpc_methods(module_coordinator)
         self._connect_module_refs(module_coordinator)
 
+        module_coordinator.build_all_modules()
         module_coordinator.start_all_modules()
 
         return module_coordinator

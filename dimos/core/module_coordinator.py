@@ -165,7 +165,7 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
                 return
             assert self._client is not None
             for index, module in zip(
-                worker_indices, self._client.deploy_parallel(worker_specs), strict=False
+                worker_indices, self._client.deploy_parallel(worker_specs), strict=True
             ):
                 results[index] = module
 
@@ -173,12 +173,12 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
             if not docker_specs:
                 return
             for index, module in zip(
-                docker_indices, DockerWorkerManager.deploy_parallel(docker_specs), strict=False
+                docker_indices, DockerWorkerManager.deploy_parallel(docker_specs), strict=True
             ):
                 results[index] = module
 
         def _register() -> None:
-            for (module_class, _, _), module in zip(module_specs, results, strict=False):
+            for (module_class, _, _), module in zip(module_specs, results, strict=True):
                 if module is not None:
                     self._deployed_modules[module_class] = module
 
@@ -191,6 +191,24 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
         safe_thread_map([_deploy_workers, _deploy_docker], lambda fn: fn(), _on_errors)
         _register()
         return results
+
+    def build_all_modules(self) -> None:
+        """Call build() on all deployed modules in parallel.
+
+        build() handles heavy one-time work (docker builds, LFS downloads, etc.)
+        with a very long timeout. Must be called after deploy and stream wiring
+        but before start_all_modules().
+        """
+        modules = list(self._deployed_modules.values())
+        if not modules:
+            raise ValueError("No modules deployed. Call deploy() before build_all_modules().")
+
+        def _on_build_errors(
+            _outcomes: list[Any], _successes: list[Any], errors: list[Exception]
+        ) -> None:
+            raise ExceptionGroup("build_all_modules failed", errors)
+
+        safe_thread_map(modules, lambda m: m.build(), _on_build_errors)
 
     def start_all_modules(self) -> None:
         modules = list(self._deployed_modules.values())

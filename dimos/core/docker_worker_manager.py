@@ -45,8 +45,9 @@ class DockerWorkerManager:
                     mod.stop()
             raise ExceptionGroup("docker deploy_parallel failed", errors)
 
-        return safe_thread_map(
-            specs,
-            lambda spec: DockerModule(spec[0], global_config=spec[1], **spec[2]),  # type: ignore[arg-type]
-            _on_errors,
-        )
+        def _deploy_one(spec: ModuleSpec) -> DockerModule:
+            mod = DockerModule(spec[0], global_config=spec[1], **spec[2])  # type: ignore[arg-type]
+            mod.build()
+            return mod
+
+        return safe_thread_map(specs, _deploy_one, _on_errors)

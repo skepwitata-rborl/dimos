@@ -26,10 +26,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from dimos.core.docker_runner import DockerModuleConfig, is_docker_module
+import threading
+
+from dimos.core.docker_runner import DockerModule, DockerModuleConfig, is_docker_module
 from dimos.core.global_config import global_config
 from dimos.core.module import Module
 from dimos.core.module_coordinator import ModuleCoordinator
+from dimos.core.rpc_client import RpcCall
 from dimos.core.stream import Out
 
 # -- Fixtures: fake module classes -------------------------------------------
@@ -198,7 +201,6 @@ class TestDockerModuleGetattr:
 
     def test_getattr_no_recursion_when_rpcs_not_set(self):
         """If __init__ fails before self.rpcs is assigned, __getattr__ must not recurse."""
-        from dimos.core.docker_runner import DockerModule
 
         dm = DockerModule.__new__(DockerModule)
         # Don't set rpcs, _module_class, or any instance attrs — simulates early __init__ failure
@@ -207,7 +209,6 @@ class TestDockerModuleGetattr:
 
     def test_getattr_no_recursion_on_cleanup_attrs(self):
         """Accessing cleanup-related attrs before they exist must raise, not recurse."""
-        from dimos.core.docker_runner import DockerModule
 
         dm = DockerModule.__new__(DockerModule)
         # These are accessed during _cleanup() — if rpcs isn't set, they must not recurse
@@ -216,8 +217,6 @@ class TestDockerModuleGetattr:
                 getattr(dm, attr)
 
     def test_getattr_delegates_to_rpc_when_rpcs_set(self):
-        from dimos.core.docker_runner import DockerModule
-        from dimos.core.rpc_client import RpcCall
 
         dm = DockerModule.__new__(DockerModule)
         dm.rpcs = {"do_thing"}
@@ -235,7 +234,6 @@ class TestDockerModuleGetattr:
         assert isinstance(result, RpcCall)
 
     def test_getattr_raises_for_unknown_method(self):
-        from dimos.core.docker_runner import DockerModule
 
         dm = DockerModule.__new__(DockerModule)
         dm.rpcs = {"do_thing"}
@@ -248,11 +246,10 @@ class TestDockerModuleCleanupReconnect:
     """Tests for DockerModule._cleanup with docker_reconnect_container."""
 
     def test_cleanup_skips_stop_when_reconnect(self):
-        from dimos.core.docker_runner import DockerModule
 
         with patch.object(DockerModule, "__init__", lambda self: None):
             dm = DockerModule.__new__(DockerModule)
-            dm._running = True
+            dm._running = threading.Event(); dm._running.set()
             dm._container_name = "test_container"
             dm._unsub_fns = []
             dm.rpc = MagicMock()
@@ -269,11 +266,10 @@ class TestDockerModuleCleanupReconnect:
                 mock_rm.assert_not_called()
 
     def test_cleanup_stops_container_when_not_reconnect(self):
-        from dimos.core.docker_runner import DockerModule
 
         with patch.object(DockerModule, "__init__", lambda self: None):
             dm = DockerModule.__new__(DockerModule)
-            dm._running = True
+            dm._running = threading.Event(); dm._running.set()
             dm._container_name = "test_container"
             dm._unsub_fns = []
             dm.rpc = MagicMock()

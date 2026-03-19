@@ -34,7 +34,10 @@ class RPCInspectable(Protocol):
 # module.py and other places imports these constants and choose what to give RPCClient
 # the RPCClient below does not use these constants directly (by design)
 DEFAULT_RPC_TIMEOUT: float = 120.0
-DEFAULT_RPC_TIMEOUTS: MappingProxyType[str, float] = MappingProxyType({"start": 1200.0})
+DEFAULT_RPC_TIMEOUTS: MappingProxyType[str, float] = MappingProxyType({
+    "build": 86400.0,  # 24h — docker builds, LFS downloads, etc.
+    "start": 1200.0,
+})
 
 
 class RPCClient(Protocol):

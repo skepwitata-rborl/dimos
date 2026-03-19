@@ -167,7 +167,9 @@ class DockerModule(ModuleProxyProtocol):
     Host-side handle for a module running inside Docker.
 
     Lifecycle:
-    - start(): builds the image if needed, launches the container, waits for readiness, calls the remote module's start() RPC (after streams are wired)
+    - __init__(): lightweight setup — config, names, RPC client, no side-effects
+    - build(): heavy work — docker build/pull image, launch container, wait for RPC readiness
+    - start(): invoke remote module's start() RPC (after streams are wired)
     - stop(): stops the container and cleans up
 
     Communication: All RPC happens via LCM multicast (requires --network=host).
@@ -176,13 +178,6 @@ class DockerModule(ModuleProxyProtocol):
     config: DockerModuleConfig
 
     def __init__(self, module_class: type[Module], *args: Any, **kwargs: Any) -> None:
-        from dimos.core.docker_build import (
-            _compute_build_hash,
-            _get_image_build_hash,
-            build_image,
-            image_exists,
-        )
-
         # global_config is passed by deploy pipeline but isn't a config field
         kwargs.pop("global_config", None)
 
@@ -198,7 +193,8 @@ class DockerModule(ModuleProxyProtocol):
         self.config = config
         self._args = args
         self._kwargs = kwargs
-        self._running = False
+        self._running = threading.Event()
+        self._is_built = False
         self.remote_name = module_class.__name__
         # Derive container name from image + class name: "my-registry/foo:v2" → "dimos_myclass_foo_v2"
         image_ref = config.docker_image.rsplit("/", 1)[-1]
@@ -216,7 +212,23 @@ class DockerModule(ModuleProxyProtocol):
         self._unsub_fns: list[Callable[[], None]] = []
         self._bound_rpc_calls: dict[str, RpcCall] = {}
 
-        # Build or pull image, launch container, wait for RPC server
+    def build(self) -> None:
+        """Build/pull docker image, launch container, wait for RPC readiness.
+
+        Idempotent — safe to call multiple times. Has no RPC timeout since
+        this runs host-side (not via RPC to a worker process).
+        """
+        if self._is_built:
+            return
+
+        from dimos.core.docker_build import (
+            _compute_build_hash,
+            _get_image_build_hash,
+            build_image,
+            image_exists,
+        )
+
+        config = self.config
         try:
             if config.docker_file is not None:
                 current_hash = _compute_build_hash(config)
@@ -259,10 +271,11 @@ class DockerModule(ModuleProxyProtocol):
                         f"Failed to start container.\nSTDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}"
                     )
             self.rpc.start()
-            self._running = True
+            self._running.set()
             # docker run -d returns before Module.__init__ finishes in the container,
             # so we poll until the RPC server is reachable before returning.
             self._wait_for_rpc()
+            self._is_built = True
         except Exception:
             with suppress(Exception):
                 self._cleanup()
@@ -299,9 +312,9 @@ class DockerModule(ModuleProxyProtocol):
 
     def stop(self) -> None:
         """Gracefully stop the Docker container and clean up resources."""
-        if not self._running:
+        if not self._running.is_set():
             return
-        self._running = False  # claim shutdown before any side-effects
+        self._running.clear()  # claim shutdown before any side-effects
         with suppress(Exception):
             self.rpc.call_nowait(f"{self.remote_name}/stop", ([], {}))
         self._cleanup()
@@ -310,11 +323,10 @@ class DockerModule(ModuleProxyProtocol):
         """Release all resources. Idempotent — safe to call from partial init or after stop()."""
         with suppress(Exception):
             self.rpc.stop()
-        for unsub in getattr(self, "_unsub_fns", []):
+        for unsub in self._unsub_fns:
             with suppress(Exception):
                 unsub()
-        with suppress(Exception):
-            self._unsub_fns.clear()
+        self._unsub_fns.clear()
         if not getattr(getattr(self, "config", None), "docker_reconnect_container", False):
             with suppress(Exception):
                 _run(
@@ -323,7 +335,7 @@ class DockerModule(ModuleProxyProtocol):
                 )
             with suppress(Exception):
                 _remove_container(self.config, self._container_name)
-        self._running = False
+        self._running.clear()
         logger.info(f"Cleaned up container handle: {self._container_name}")
 
     def status(self) -> dict[str, Any]:
@@ -332,7 +344,7 @@ class DockerModule(ModuleProxyProtocol):
             "module": self.remote_name,
             "container_name": self._container_name,
             "image": cfg.docker_image,
-            "running": bool(self._running and _is_container_running(cfg, self._container_name)),
+            "running": self._running.is_set() and _is_container_running(cfg, self._container_name),
         }
 
     def tail_logs(self, n: int = 200) -> str:
