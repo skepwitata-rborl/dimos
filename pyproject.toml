@@ -302,6 +302,12 @@ sim = [
 #     "xformers @ https://pypi.jetson-ai-lab.io/jp6/cu126/+f/.../xformers-0.0.33-cp39-abi3-linux_aarch64.whl ; platform_machine == 'aarch64' and sys_platform == 'linux'",
 # ]
 
+navigation = [
+    # PGO (pose graph optimization) — gtsam-develop has aarch64 wheels; stable gtsam 4.2 does not
+    "gtsam>=4.2; platform_machine != 'aarch64'",
+    "gtsam-develop; platform_machine == 'aarch64'",
+]
+
 drone = [
     "pymavlink"
 ]
@@ -335,6 +341,11 @@ docker = [
 base = [
     "dimos[agents,web,perception,visualization,sim]",
 ]
+
+[tool.uv]
+# gtsam-develop incorrectly declares pytest as a runtime dependency (packaging bug).
+# Override it to keep our pinned version.
+override-dependencies = ["pytest==8.3.5"]
 
 [tool.ruff]
 line-length = 100
