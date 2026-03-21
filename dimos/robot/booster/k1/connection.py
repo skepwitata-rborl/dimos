@@ -79,13 +79,10 @@ def _camera_info_static() -> CameraInfo:
     )
 
 
-_Config = TypeVar("_Config", bound=ConnectionConfig, default=ConnectionConfig)
-
-
-class K1Connection(Module[_Config], Camera, Pointcloud):
+class K1Connection(Module[ConnectionConfig], Camera, Pointcloud):
     """Connection module for the Booster K1 humanoid robot."""
 
-    default_config = ConnectionConfig  # type: ignore[assignment]
+    default_config = ConnectionConfig
 
     cmd_vel: In[Twist]
     # TODO: publish pointcloud, odom, and lidar once K1 hardware exposes this data
