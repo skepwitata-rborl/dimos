@@ -89,23 +89,35 @@ def _build_html(python_file: str, *, show_disconnected: bool = True) -> str:
 
     import json
 
-    sections = []
-    all_label_colors: dict[str, str] = {}
-    all_disconnected: set[str] = set()
-    for name, bp in blueprints:
+    per_bp_label_colors: list[dict[str, str]] = []
+    per_bp_disconnected: list[set[str]] = []
+
+    tab_buttons = []
+    tab_panels = []
+    for idx, (name, bp) in enumerate(blueprints):
         mermaid_code, label_colors, disconnected = mermaid_render(
             bp, show_disconnected=show_disconnected
         )
-        all_label_colors.update(label_colors)
-        all_disconnected.update(disconnected)
-        sections.append(
-            f"<h2>{name}</h2>\n"
+        per_bp_label_colors.append(label_colors)
+        per_bp_disconnected.append(disconnected)
+
+        active_cls = " active" if idx == 0 else ""
+        tab_buttons.append(
+            f'<button class="tab-btn{active_cls}" data-idx="{idx}">{name}</button>'
+        )
+        tab_panels.append(
+            f'<div class="tab-panel{active_cls}" data-idx="{idx}">'
             f'<div class="viewport"><div class="canvas">'
             f'<pre class="mermaid">\n{mermaid_code}\n</pre>'
-            f"</div></div>"
+            f"</div></div></div>"
         )
-    label_colors_json = json.dumps(all_label_colors)
-    disconnected_json = json.dumps(sorted(all_disconnected))
+
+    all_label_colors_json = json.dumps(per_bp_label_colors)
+    all_disconnected_json = json.dumps([sorted(d) for d in per_bp_disconnected])
+
+    tab_bar_html = ""
+    if len(blueprints) > 1:
+        tab_bar_html = f'<div class="tab-bar">{"".join(tab_buttons)}</div>'
 
     return f"""\
 <!DOCTYPE html>
@@ -115,9 +127,19 @@ def _build_html(python_file: str, *, show_disconnected: bool = True) -> str:
 <style>
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 body {{ background: #1e1e1e; color: #ccc; font-family: sans-serif; overflow: hidden; height: 100vh; }}
-h2 {{ padding: 0.6em 1em 0.3em; border-bottom: 1px solid #444; position: relative; z-index: 1; }}
+.tab-bar {{
+    display: flex; gap: 0; border-bottom: 1px solid #444; background: #252525;
+    position: relative; z-index: 2;
+}}
+.tab-btn {{
+    background: transparent; color: #888; border: none; border-bottom: 2px solid transparent;
+    padding: 0.6em 1.4em; font-size: 0.95em; cursor: pointer; white-space: nowrap;
+}}
+.tab-btn:hover {{ color: #ccc; background: #2a2a2a; }}
+.tab-btn.active {{ color: #eee; border-bottom-color: #60a5fa; background: #1e1e1e; }}
+.tab-panel.hidden {{ display: none; }}
 .viewport {{
-    width: 100%; height: calc(100vh - 3em);
+    width: 100%; height: calc(100vh - 2.6em);
     overflow: hidden; cursor: grab; position: relative;
 }}
 .viewport.grabbing {{ cursor: grabbing; }}
@@ -147,7 +169,8 @@ h2 {{ padding: 0.6em 1em 0.3em; border-bottom: 1px solid #444; position: relativ
 .streamNode .nodeLabel {{ font-size: 18px !important; }}
 </style>
 </head><body>
-{"".join(sections)}
+{tab_bar_html}
+{"".join(tab_panels)}
 <div class="controls">
     <button id="zoomIn" title="Zoom in">+</button>
     <button id="zoomOut" title="Zoom out">&minus;</button>
@@ -166,16 +189,18 @@ mermaid.initialize({{
     }},
 }});
 
-// Render, then set up pan/zoom and colour edge labels
 await mermaid.run();
 
-document.querySelectorAll('.viewport').forEach(vp => {{
+const allLabelColors = {all_label_colors_json};
+const allDisconnected = {all_disconnected_json};
+
+function setupViewport(vp, labelColors, disconnectedList) {{
     const canvas = vp.querySelector('.canvas');
     const svg = canvas.querySelector('svg');
+    if (!svg) return;
     let scale, panX, panY;
     let dragging = false, startX, startY;
 
-    // Resize nodes: shrink stream nodes, enlarge module nodes
     svg.querySelectorAll('.node').forEach(node => {{
         const rect = node.querySelector('rect');
         if (!rect) return;
@@ -204,12 +229,10 @@ document.querySelectorAll('.viewport').forEach(vp => {{
         }}
     }});
 
-    // Fix edge label foreignObjects and simplify DOM
     svg.querySelectorAll('.edgeLabel').forEach(label => {{
         const fo = label.querySelector('foreignObject');
         if (fo) {{
             fo.setAttribute('height', '35');
-            // Replace div>span nesting with just a span
             const div = fo.querySelector('div');
             if (div) {{
                 const span = document.createElement('span');
@@ -221,14 +244,11 @@ document.querySelectorAll('.viewport').forEach(vp => {{
                 div.replaceWith(span);
             }}
         }}
-        // Round the background rect corners
         const rect = label.querySelector('rect');
         if (rect) {{ rect.setAttribute('rx', '6'); rect.setAttribute('ry', '6'); }}
     }});
 
-    // Colour edge labels by matching text content to colour map
-    const labelColors = {label_colors_json};
-    const disconnectedLabels = new Set({disconnected_json});
+    const disconnectedLabels = new Set(disconnectedList);
     svg.querySelectorAll('.edgeLabel').forEach(label => {{
         const text = (label.textContent || '').trim();
         const color = labelColors[text];
@@ -237,7 +257,6 @@ document.querySelectorAll('.viewport').forEach(vp => {{
             if (el.tagName === 'text') el.setAttribute('fill', color);
             else el.style.color = color;
         }});
-        // Dashed border for disconnected (dangling) stream labels
         if (disconnectedLabels.has(text)) {{
             label.querySelectorAll('span').forEach(span => {{
                 span.style.border = `dashed ${{color}} 1px`;
@@ -295,7 +314,8 @@ document.querySelectorAll('.viewport').forEach(vp => {{
         vp.classList.remove('grabbing');
     }});
 
-    // Button controls
+    vp._fitToView = fitToView;
+
     document.getElementById('zoomIn').addEventListener('click', () => {{
         const rect = vp.getBoundingClientRect();
         const cx = rect.width / 2, cy = rect.height / 2;
@@ -314,6 +334,33 @@ document.querySelectorAll('.viewport').forEach(vp => {{
     }});
     document.getElementById('resetView').addEventListener('click', () => {{
         fitToView();
+    }});
+}}
+
+// All panels are visible — set up every viewport while they have real dimensions
+document.querySelectorAll('.tab-panel').forEach((panel, idx) => {{
+    const vp = panel.querySelector('.viewport');
+    if (vp) setupViewport(vp, allLabelColors[idx] || {{}}, allDisconnected[idx] || []);
+}});
+
+// Now hide the non-active panels
+document.querySelectorAll('.tab-panel:not(.active)').forEach(p => p.classList.add('hidden'));
+
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {{
+    btn.addEventListener('click', () => {{
+        const idx = btn.dataset.idx;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => {{
+            p.classList.remove('active');
+            p.classList.add('hidden');
+        }});
+        btn.classList.add('active');
+        const panel = document.querySelector(`.tab-panel[data-idx="${{idx}}"]`);
+        panel.classList.add('active');
+        panel.classList.remove('hidden');
+        const vp = panel.querySelector('.viewport');
+        if (vp && vp._fitToView) setTimeout(() => vp._fitToView(), 0);
     }});
 }});
 </script>
