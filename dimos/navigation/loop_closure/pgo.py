@@ -37,6 +37,9 @@ from dimos.core.stream import In, Out
 from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 from dimos.msgs.nav_msgs.Odometry import Odometry
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
+from dimos.utils.logging_config import setup_logger
+
+logger = setup_logger()
 
 
 class PGOConfig(ModuleConfig):
@@ -296,7 +299,7 @@ class _SimplePGO:
             }
         )
         self._history_pairs.append((loop_idx, cur_idx))
-        print(f"[PGO] Loop closure detected: {loop_idx} <-> {cur_idx} (score={fitness:.4f})")
+        logger.info(f"[PGO] Loop closure detected: {loop_idx} <-> {cur_idx} (score={fitness:.4f})")
 
     def smooth_and_update(self) -> None:
         has_loop = bool(self._cache_pairs)
@@ -380,6 +383,7 @@ class PGO(Module[PGOConfig]):
     def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
         super().__init__(**kwargs)
         self._lock = threading.Lock()
+        self._pgo_lock = threading.Lock()
         self._running = False
         self._thread: threading.Thread | None = None
         self._pgo: _SimplePGO | None = None
@@ -392,24 +396,26 @@ class PGO(Module[PGOConfig]):
 
     def __getstate__(self) -> dict:
         state = super().__getstate__()
-        for k in ("_lock", "_thread", "_pgo"):
+        for k in ("_lock", "_pgo_lock", "_thread", "_pgo"):
             state.pop(k, None)
         return state
 
     def __setstate__(self, state: dict) -> None:
         super().__setstate__(state)
         self._lock = threading.Lock()
+        self._pgo_lock = threading.Lock()
         self._thread = None
         self._pgo = None
 
     def start(self) -> None:
+        super().start()
         self._pgo = _SimplePGO(self.config)
         self.raw_odom._transport.subscribe(self._on_raw_odom)
         self.registered_scan._transport.subscribe(self._on_scan)
         self._running = True
         self._thread = threading.Thread(target=self._publish_loop, daemon=True)
         self._thread.start()
-        print("[PGO] Python PGO module started (gtsam iSAM2)")
+        logger.info("[PGO] Python PGO module started (gtsam iSAM2)")
 
     def stop(self) -> None:
         self._running = False
@@ -456,17 +462,19 @@ class PGO(Module[PGOConfig]):
         else:
             body_pts = points[:, :3]
 
-        added = pgo.add_key_pose(r_local, t_local, ts, body_pts)
-        if added:
-            pgo.search_for_loops()
-            pgo.smooth_and_update()
-            print(
-                f"[PGO] Keyframe {pgo.num_key_poses} added "
-                f"({t_local[0]:.1f}, {t_local[1]:.1f}, {t_local[2]:.1f})"
-            )
+        with self._pgo_lock:
+            added = pgo.add_key_pose(r_local, t_local, ts, body_pts)
+            if added:
+                pgo.search_for_loops()
+                pgo.smooth_and_update()
+                logger.info(
+                    f"[PGO] Keyframe {pgo.num_key_poses} added "
+                    f"({t_local[0]:.1f}, {t_local[1]:.1f}, {t_local[2]:.1f})"
+                )
 
-        # Publish corrected odometry
-        r_corr, t_corr = pgo.get_corrected_pose(r_local, t_local)
+            # Publish corrected odometry
+            r_corr, t_corr = pgo.get_corrected_pose(r_local, t_local)
+
         self._publish_corrected_odom(r_corr, t_corr, ts)
 
     def _publish_corrected_odom(self, r: np.ndarray, t: np.ndarray, ts: float) -> None:
@@ -507,14 +515,16 @@ class PGO(Module[PGOConfig]):
             now = time.time()
 
             if now - self._last_global_static_map_time > interval and pgo.num_key_poses > 0:
-                cloud_np = pgo.build_global_static_map(self.config.global_static_map_voxel_size)
+                with self._pgo_lock:
+                    cloud_np = pgo.build_global_static_map(self.config.global_static_map_voxel_size)
+                    n_keyframes = pgo.num_key_poses
                 if len(cloud_np) > 0:
                     self.global_static_map._transport.publish(
                         PointCloud2.from_numpy(cloud_np, frame_id="map", timestamp=now)
                     )
-                    print(
+                    logger.info(
                         f"[PGO] Global map published: {len(cloud_np)} points, "
-                        f"{pgo.num_key_poses} keyframes"
+                        f"{n_keyframes} keyframes"
                     )
                 self._last_global_static_map_time = now
 

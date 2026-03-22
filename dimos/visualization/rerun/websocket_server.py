@@ -101,6 +101,8 @@ class RerunWebSocketServer(Module[Config]):
             and self._stop_event is not None
         ):
             self._ws_loop.call_soon_threadsafe(self._stop_event.set)
+        if self._server_thread is not None:
+            self._server_thread.join(timeout=5.0)
         super().stop()
 
     def _run_server(self) -> None:
