@@ -12,22 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Safe interactive prompts for module code.
-
-Use ``confirm`` instead of bare ``typer.confirm`` or ``input()`` in any
-code that may run during module build/start (non-interactive environments).
+"""
+Prompts that are safe to call in modules (despite potentially no stdin, or poentially a TUI that eats/controls the stdin)
 """
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 from typing import Any
 
 
-def confirm(message: str, *, default: bool = True, **kwargs: Any) -> bool:
-    """Ask yes/no. Returns *default* if stdin is not a TTY."""
+def confirm(message: str, *, default: bool = True) -> bool:
+    """Ask yes/no"""
     if not sys.stdin.isatty():
         return default
     import typer
 
-    return typer.confirm(message, default=default, **kwargs)
+    return typer.confirm(message, default=default)
+
+
+def sudo_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+    """Run a command, prepending sudo if not already root."""
+    if os.geteuid() == 0:
+        return subprocess.run(list(args), **kwargs)
+    return subprocess.run(["sudo", *args], **kwargs)
