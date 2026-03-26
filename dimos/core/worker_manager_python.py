@@ -16,35 +16,61 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from contextlib import suppress
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from dimos.core.global_config import GlobalConfig
 from dimos.core.module import ModuleBase, ModuleSpec
 from dimos.core.rpc_client import RPCClient
-from dimos.core.worker import Worker
+from dimos.core.worker_python import Worker
 from dimos.utils.logging_config import setup_logger
 from dimos.utils.thread_utils import safe_thread_map
 from dimos.utils.typing_utils import ExceptionGroup
 
+if TYPE_CHECKING:
+    from dimos.core.resource_monitor.monitor import StatsMonitor
+
 logger = setup_logger()
 
 
-class WorkerManager:
-    def __init__(self, n_workers: int = 2) -> None:
-        self._n_workers = n_workers
+_MIN_WORKERS = 2
+
+
+class WorkerManagerPython:
+    def __init__(self, g: GlobalConfig) -> None:
+        self._cfg = g
+        self._max_workers = g.n_workers
+        self._worker_to_module_ratio = g.worker_to_module_ratio
         self._workers: list[Worker] = []
+        self._n_modules = 0
         self._closed = False
         self._started = False
+        self._stats_monitor: StatsMonitor | None = None
+
+    def _desired_workers(self, n_modules: int) -> int:
+        """Target worker count: ratio * modules, clamped to [_MIN_WORKERS, max_workers]."""
+        from_ratio = int(n_modules * self._worker_to_module_ratio + 0.5)
+        return max(_MIN_WORKERS, min(from_ratio, self._max_workers))
+
+    def _ensure_workers(self, n_modules: int) -> None:
+        """Grow the worker pool to match the desired count for *n_modules*."""
+        target = self._desired_workers(n_modules)
+        while len(self._workers) < target:
+            worker = Worker()
+            worker.start_process()
+            self._workers.append(worker)
 
     def start(self) -> None:
         if self._started:
             return
         self._started = True
-        for _ in range(self._n_workers):
-            worker = Worker()
-            worker.start_process()
-            self._workers.append(worker)
-        logger.info("Worker pool started.", n_workers=self._n_workers)
+        self._ensure_workers(self._n_modules)
+        logger.info("Worker pool started.", n_workers=len(self._workers))
+
+        if self._cfg.dtop:
+            from dimos.core.resource_monitor.monitor import StatsMonitor
+
+            self._stats_monitor = StatsMonitor(self)
+            self._stats_monitor.start()
 
     def _select_worker(self) -> Worker:
         return min(self._workers, key=lambda w: w.module_count)
@@ -53,27 +79,30 @@ class WorkerManager:
         self, module_class: type[ModuleBase], global_config: GlobalConfig, kwargs: dict[str, Any]
     ) -> RPCClient:
         if self._closed:
-            raise RuntimeError("WorkerManager is closed")
+            raise RuntimeError("WorkerManagerPython is closed")
 
-        # Auto-start for backward compatibility
         if not self._started:
             self.start()
 
+        self._n_modules += 1
+        self._ensure_workers(self._n_modules)
         worker = self._select_worker()
         actor = worker.deploy_module(module_class, global_config, kwargs=kwargs)
         return RPCClient(actor, module_class)
 
     def deploy_parallel(self, module_specs: Iterable[ModuleSpec]) -> list[RPCClient]:
         if self._closed:
-            raise RuntimeError("WorkerManager is closed")
+            raise RuntimeError("WorkerManagerPython is closed")
 
         module_specs = list(module_specs)
         if len(module_specs) == 0:
             return []
 
-        # Auto-start for backward compatibility
         if not self._started:
             self.start()
+
+        self._n_modules += len(module_specs)
+        self._ensure_workers(self._n_modules)
 
         # Pre-assign workers sequentially (so least-loaded accounting is
         # correct), then deploy concurrently via threads. The per-worker lock
@@ -99,6 +128,21 @@ class WorkerManager:
             _on_errors,
         )
 
+    def should_manage(self, module_class: type) -> bool:
+        """Catch-all — accepts any module not claimed by another manager."""
+        return True
+
+    def health_check(self) -> bool:
+        """Verify all worker processes are alive."""
+        if len(self._workers) == 0:
+            logger.error("health_check: no workers found")
+            return False
+        for w in self._workers:
+            if w.pid is None:
+                logger.error("health_check: worker died", worker_id=w.worker_id)
+                return False
+        return True
+
     def suppress_console(self) -> None:
         """Tell all workers to redirect stdout/stderr to /dev/null."""
         for worker in self._workers:
@@ -108,10 +152,14 @@ class WorkerManager:
     def workers(self) -> list[Worker]:
         return list(self._workers)
 
-    def close_all(self) -> None:
+    def stop(self) -> None:
         if self._closed:
             return
         self._closed = True
+
+        if self._stats_monitor is not None:
+            self._stats_monitor.stop()
+            self._stats_monitor = None
 
         logger.info("Shutting down all workers...")
 

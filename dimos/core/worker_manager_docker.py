@@ -16,26 +16,51 @@ from __future__ import annotations
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
-from dimos.core.module import ModuleSpec
+from dimos.core.global_config import GlobalConfig
+from dimos.core.module import ModuleBase, ModuleSpec
+from dimos.utils.logging_config import setup_logger
 from dimos.utils.thread_utils import safe_thread_map
 from dimos.utils.typing_utils import ExceptionGroup
 
 if TYPE_CHECKING:
     from dimos.core.docker_module import DockerModuleOuter
+    from dimos.core.rpc_client import ModuleProxyProtocol
+
+logger = setup_logger()
 
 
-class DockerWorkerManager:
-    """Parallel deployment of Docker-backed modules."""
+class WorkerManagerDocker:
+    """Manages deployment of Docker-backed modules."""
 
-    @staticmethod
-    def deploy_parallel(
-        specs: list[ModuleSpec],
-    ) -> list[DockerModuleOuter]:
-        """Deploy multiple DockerModules in parallel.
+    def __init__(self, g: GlobalConfig) -> None:
+        self._cfg = g
+        self._deployed: list[DockerModuleOuter] = []
 
-        If any deployment fails, all successfully-started containers are
-        stopped before an ExceptionGroup is raised.
-        """
+    def should_manage(self, module_class: type) -> bool:
+        # inlined to prevent circular dependency
+        from dimos.core.docker_module import is_docker_module
+
+        return is_docker_module(module_class)
+
+    def start(self) -> None:
+        """No-op — Docker manager has no persistent workers."""
+
+    def deploy(
+        self,
+        module_class: type[ModuleBase],
+        global_config: GlobalConfig,
+        kwargs: dict[str, Any],
+    ) -> ModuleProxyProtocol:
+        # inlined to prevent circular dependency
+        from dimos.core.docker_module import DockerModuleOuter
+
+        mod = DockerModuleOuter(module_class, g=global_config, **kwargs)  # type: ignore[arg-type]
+        mod.build()
+        self._deployed.append(mod)
+        return mod
+
+    def deploy_parallel(self, specs: list[ModuleSpec]) -> list[ModuleProxyProtocol]:
+        # inlined to prevent circular dependency
         from dimos.core.docker_module import DockerModuleOuter
 
         def _on_errors(
@@ -51,4 +76,19 @@ class DockerWorkerManager:
             mod.build()
             return mod
 
-        return safe_thread_map(specs, _deploy_one, _on_errors)
+        results = safe_thread_map(specs, _deploy_one, _on_errors)
+        self._deployed.extend(results)
+        return results  # type: ignore[return-value]
+
+    def stop(self) -> None:
+        for mod in reversed(self._deployed):
+            with suppress(Exception):
+                mod.stop()
+        self._deployed.clear()
+
+    def health_check(self) -> bool:
+        # TODO: in the future decide on what a meaninful health check would be
+        return True
+
+    def suppress_console(self) -> None:
+        """No-op — Docker containers manage their own stdio."""

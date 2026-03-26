@@ -554,11 +554,6 @@ class DockerModuleInner:
         self._shutdown.wait()
 
 
-# ---------------------------------------------------------------------------
-# Helpers (private — used by the classes above)
-# ---------------------------------------------------------------------------
-
-
 def _run(cmd: list[str], *, timeout: float | None = None) -> subprocess.CompletedProcess[str]:
     logger.debug(f"exec: {' '.join(cmd)}")
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
