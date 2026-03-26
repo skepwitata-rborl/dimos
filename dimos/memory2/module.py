@@ -74,7 +74,6 @@ class StreamModule(Module[ModuleConfigT]):
         inp_port.subscribe(lambda msg: stream.append(msg))
 
         live = stream.live()
-        self.register_disposable(live)
         # and we push stream output to the output port
         self._apply_pipeline(live).subscribe(
             lambda obs: out_port.publish(obs.data),
