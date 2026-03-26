@@ -54,11 +54,11 @@ def _static_base_link(rr: Any) -> list[Any]:
     return [
         rr.Boxes3D(
             half_sizes=[0.2, 0.15, 0.62],
-            centers=[[0, 0, -0.62]],
+            centers=[[0, 0, 0.62]],
             colors=[(0, 255, 127)],
             fill_mode="MajorWireframe",
         ),
-        rr.Transform3D(parent_frame="tf#/base_link"),
+        rr.Transform3D(parent_frame="tf#/sensor"),
     ]
 
 
@@ -79,6 +79,8 @@ _vis = vis_module(
             # Rerun world frame (which is shifted from map by -vehicle_height).
             "world/lidar": _static_map_frame,
             "world/global_pointcloud": _static_map_frame,
+            "world/global_map": _static_map_frame,
+            "world/terrain_map": _static_map_frame,
         },
     },
 )
