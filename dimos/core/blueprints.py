@@ -485,7 +485,7 @@ class Blueprint:
         self._verify_no_name_conflicts()
 
         logger.info("Starting the modules")
-        module_coordinator = ModuleCoordinator(cfg=global_config)
+        module_coordinator = ModuleCoordinator(g=global_config)
         module_coordinator.start()
 
         # all module constructors are called here (each of them setup their own)

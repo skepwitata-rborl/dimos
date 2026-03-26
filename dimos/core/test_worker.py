@@ -17,10 +17,10 @@ from typing import TYPE_CHECKING
 import pytest
 
 from dimos.core.core import rpc
-from dimos.core.global_config import global_config
+from dimos.core.global_config import GlobalConfig, global_config
 from dimos.core.module import Module
 from dimos.core.stream import In, Out
-from dimos.core.worker_manager import WorkerManager
+from dimos.core.worker_manager_python import WorkerManagerPython
 from dimos.msgs.geometry_msgs.Vector3 import Vector3
 
 if TYPE_CHECKING:
@@ -87,14 +87,15 @@ def create_worker_manager():
 
     def _create(n_workers):
         nonlocal manager
-        manager = WorkerManager(n_workers=n_workers)
+        g = GlobalConfig(n_workers=n_workers)
+        manager = WorkerManagerPython(g=g)
         manager.start()
         return manager
 
     yield _create
 
     if manager is not None:
-        manager.close_all()
+        manager.stop()
 
 
 @pytest.mark.slow
