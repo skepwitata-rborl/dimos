@@ -72,19 +72,16 @@ class Stream(CompositeResource, Generic[T]):
     ) -> None:
         super().__init__()
         self._source = source
+        if source is not None:
+            self.register_disposable(source)
         self._transform = transform
         self._query = query
 
     def stop(self) -> None:
-        """Close live buffer and dispose subscriptions."""
-        # Close live buffer first — unblocks iterator threads
+        """Close live buffer, then dispose source + subscriptions."""
         buf = self._query.live_buffer
         if buf is not None:
             buf.close()
-        # Recurse into source streams (not backends — Store owns those)
-        if isinstance(self._source, Stream):
-            self._source.stop()
-        # Dispose tracked subscriptions (from .subscribe())
         super().stop()
 
     def __str__(self) -> str:

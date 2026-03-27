@@ -545,7 +545,7 @@ class TestStoreLifecycle:
         assert [obs.data for obs in s2] == [2, 3]
 
     def test_store_stop_stops_backends(self, session: Store) -> None:
-        """Store.stop() disposes backends (registered as disposables)."""
+        """Store.stop() disposes backends transitively via streams."""
         s1 = session.stream("x", int)
         s2 = session.stream("y", int)
         s1.append(10)

@@ -150,7 +150,7 @@ class Store(Configurable[StoreConfig], CompositeResource):
         """
         if name not in self._streams:
             resolved = {**self.config.model_dump(exclude_none=True), **overrides}
-            backend = self.register_disposable(self._create_backend(name, payload_type, **resolved))
+            backend = self._create_backend(name, payload_type, **resolved)
             backend.start()
             self._streams[name] = Stream(source=backend)
         return cast("Stream[T]", self._streams[name])
@@ -161,11 +161,11 @@ class Store(Configurable[StoreConfig], CompositeResource):
 
     def delete_stream(self, name: str) -> None:
         """Delete a stream by name (from cache and underlying storage)."""
-        self._streams.pop(name, None)
+        stream = self._streams.pop(name, None)
+        if stream is not None:
+            stream.stop()
 
     def stop(self) -> None:
-        # Stop streams first (closes live buffers, disposes subscriptions)
         for stream in self._streams.values():
             stream.stop()
-        # Then stop backends (registered as disposables)
         super().stop()
