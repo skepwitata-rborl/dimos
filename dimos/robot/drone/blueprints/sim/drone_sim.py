@@ -1,3 +1,17 @@
+# Copyright 2025-2026 Dimensional Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Blueprint for the MuJoCo drone simulation.
 
 Usage:
@@ -5,10 +19,11 @@ Usage:
     drone_sim_agentic().build().loop()
 """
 
-from dimos.agents.agent import agent
-from dimos.agents.web_human_input import web_input
+from dimos.agents.mcp.mcp_client import McpClient
+from dimos.agents.mcp.mcp_server import McpServer
+from dimos.agents.web_human_input import WebInput
 from dimos.core.blueprints import Blueprint, autoconnect
-from dimos.robot.drone.sim import SimulatedDroneConnection
+from dimos.simulation.mujoco.drone_sim_connection import SimulatedDroneConnection
 from dimos.web.websocket_vis.websocket_vis_module import WebsocketVisModule
 
 DRONE_SIM_SYSTEM_PROMPT = """\
@@ -45,6 +60,7 @@ def drone_sim_agentic(
             headless=headless,
         ),
         WebsocketVisModule.blueprint(),
-        agent(system_prompt=system_prompt, model=model),
-        web_input(),
+        McpServer.blueprint(),
+        McpClient.blueprint(system_prompt=system_prompt, model=model),
+        WebInput.blueprint(),
     )

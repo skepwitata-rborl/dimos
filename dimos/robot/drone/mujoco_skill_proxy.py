@@ -1,4 +1,17 @@
-#!/usr/bin/env python3
+# Copyright 2025-2026 Dimensional Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Lightweight skill proxy for MuJoCo drone simulation.
 
 Exposes the same @skill interface as DroneConnectionModule but sends
@@ -15,9 +28,9 @@ from dimos.agents.annotation import skill
 from dimos.core.core import rpc
 from dimos.core.module import Module
 from dimos.core.stream import In, Out
-from dimos.mapping.types import LatLon
+from dimos.mapping.models import LatLon
 from dimos.msgs.geometry_msgs import PoseStamped, Twist, Vector3
-from dimos.msgs.sensor_msgs import Image
+from dimos.msgs.sensor_msgs.Image import Image
 from dimos.utils.logging_config import setup_logger
 
 logger = setup_logger()
@@ -308,6 +321,10 @@ class MuJocoSkillProxy(Module):
 
     @rpc
     def stop(self) -> None:
+        self._send_cmd(
+            {"type": "velocity", "vx": 0, "vy": 0, "vz": 0, "yaw_rate": 0, "duration": 0}
+        )
         if self._sock:
             self._sock.close()
+            self._sock = None
         super().stop()

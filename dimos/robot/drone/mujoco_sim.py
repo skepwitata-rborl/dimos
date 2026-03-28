@@ -1,4 +1,17 @@
-#!/usr/bin/env python3
+# Copyright 2025-2026 Dimensional Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """MuJoCo drone simulation with interactive 3D viewer + DimOS Nightwatch.
 
 Opens a MuJoCo window with a Skydio X2 quadrotor in a city scene.
@@ -11,19 +24,17 @@ Usage:
 
 import json
 import math
-import select
-import sys
-import termios
 import threading
 import time
-import tty
 
 import mujoco
 import mujoco.viewer
 
-from dimos.mapping.types import LatLon
-from dimos.msgs.geometry_msgs import PoseStamped, Quaternion, Vector3
-from dimos.robot.drone.sim import EARTH_R, GPS_ORIGIN_LAT, GPS_ORIGIN_LON, _local_to_gps
+from dimos.simulation.mujoco.drone_sim_connection import (
+    EARTH_R,
+    GPS_ORIGIN_LAT,
+    GPS_ORIGIN_LON,
+)
 from dimos.simulation.mujoco.policy import DroneController
 from dimos.utils.data import get_data
 
@@ -33,10 +44,6 @@ class DimOSBridge:
 
     def __init__(self, controller: DroneController) -> None:
         self.controller = controller
-        self._odom_pub = None
-        self._gps_pub = None
-        self._status_pub = None
-        self._cmd_sub = None
         self._agent_thread = None
         self._running = False
 
@@ -62,20 +69,20 @@ class DimOSBridge:
 
     def _start_agent(self) -> None:
         try:
-            from dimos.agents.agent import agent as make_agent
-            from dimos.agents.web_human_input import web_input
+            from dimos.agents.mcp.mcp_client import McpClient
+            from dimos.agents.mcp.mcp_server import McpServer
+            from dimos.agents.web_human_input import WebInput
             from dimos.core.blueprints import autoconnect
-            from dimos.robot.drone.blueprints.sim.drone_sim import (
-                DRONE_SIM_SYSTEM_PROMPT as DRONE_SYSTEM_PROMPT,
-            )
+            from dimos.robot.drone.blueprints.sim.drone_sim import DRONE_SIM_SYSTEM_PROMPT
             from dimos.robot.drone.mujoco_skill_proxy import MuJocoSkillProxy
             from dimos.web.websocket_vis.websocket_vis_module import WebsocketVisModule
 
             bp = autoconnect(
                 MuJocoSkillProxy.blueprint(),
                 WebsocketVisModule.blueprint(),
-                make_agent(system_prompt=DRONE_SYSTEM_PROMPT, model="gpt-4o"),
-                web_input(),
+                McpServer.blueprint(),
+                McpClient.blueprint(system_prompt=DRONE_SIM_SYSTEM_PROMPT, model="gpt-4o"),
+                WebInput.blueprint(),
             )
             bp.build().loop()
         except Exception as e:
@@ -145,52 +152,6 @@ class DimOSBridge:
                 self.controller.set_velocity(speed * ex / dist, speed * ey / dist, 0, 0)
             print(f"[Agent] fly_to {lat:.6f}, {lon:.6f}")
 
-    def publish_state(self, model: mujoco.MjModel, data: mujoco.MjData) -> None:
-        if self._odom_pub is None:
-            return
-
-        body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "x2")
-        pos = data.xpos[body_id]
-        quat_mj = data.xquat[body_id]
-        vel = data.cvel[body_id]
-
-        x, y, z = float(pos[0]), float(pos[1]), float(pos[2])
-        now = time.time()
-
-        pose = PoseStamped(
-            position=Vector3(x, y, z),
-            orientation=Quaternion(
-                float(quat_mj[1]), float(quat_mj[2]), float(quat_mj[3]), float(quat_mj[0])
-            ),
-            frame_id="world",
-            ts=now,
-        )
-        self._odom_pub.publish(pose)
-
-        lat, lon = _local_to_gps(x, y)
-        self._gps_pub.publish(LatLon(lat=lat, lon=lon))
-
-        siny = 2.0 * (quat_mj[0] * quat_mj[3] + quat_mj[1] * quat_mj[2])
-        cosy = 1.0 - 2.0 * (quat_mj[2] ** 2 + quat_mj[3] ** 2)
-        heading_deg = math.degrees(math.atan2(siny, cosy)) % 360
-
-        from dimos_lcm.std_msgs import String
-
-        status = {
-            "armed": True,
-            "mode": "GUIDED",
-            "altitude": z,
-            "heading": heading_deg,
-            "lat": lat,
-            "lon": lon,
-            "vx": float(vel[3]),
-            "vy": float(vel[4]),
-            "vz": float(vel[5]),
-            "simulator": "mujoco",
-            "ts": now,
-        }
-        self._status_pub.publish(String(json.dumps(status)))
-
     def stop(self) -> None:
         self._running = False
 
@@ -209,11 +170,6 @@ def main() -> None:
     bridge = DimOSBridge(controller)
     bridge.start()
 
-    armed = True
-    mode = "GUIDED"
-    step_count = 0
-    body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "x2")
-
     # Keyframe already at z=3 hover — no takeoff needed, just hold position
     controller.set_velocity(0, 0, 0, 0)
     print(">> Hovering at 3.0m — ready for commands")
@@ -225,94 +181,23 @@ def main() -> None:
 ║  3D Viewer: MuJoCo window                     ║
 ║  AI Agent:  http://localhost:5555              ║
 ║                                               ║
-║  Terminal:  t=takeoff l=land w/s/a/d/q/e/r/f  ║
-║            x=stop  ESC=quit                   ║
+║  Close viewer window to exit.                 ║
 ╚═══════════════════════════════════════════════╝
     """)
 
     def physics_step(m: mujoco.MjModel, d: mujoco.MjData) -> None:
-        if armed and mode == "GUIDED":
-            d.ctrl[:] = controller.compute_control()
-        elif armed:
-            d.ctrl[:] = controller.hover_thrust
-        else:
-            d.ctrl[:] = 0.0
+        d.ctrl[:] = controller.compute_control()
 
     mujoco.set_mjcb_control(physics_step)
 
-    with mujoco.viewer.launch_passive(model, data) as viewer:
-        viewer.cam.distance = 5.0
-        viewer.cam.elevation = -20.0
-        viewer.cam.lookat[:] = [0, 0, 1.5]
-
-        # Terminal keyboard input (only works in a real TTY)
-        use_keyboard = sys.stdin.isatty()
-        old_settings = None
-        if use_keyboard:
-            old_settings = termios.tcgetattr(sys.stdin)
-            tty.setcbreak(sys.stdin.fileno())
-
-        try:
-            while viewer.is_running():
-                mujoco.mj_step(model, data)
-                step_count += 1
-                viewer.sync()
-
-                viewer.cam.lookat[:] = data.xpos[body_id]
-
-                # Publish to DimOS at ~30Hz
-                if step_count % max(1, int(1.0 / model.opt.timestep / 30)) == 0:
-                    bridge.publish_state(model, data)
-
-                # Terminal keyboard
-                if use_keyboard and select.select([sys.stdin], [], [], 0)[0]:
-                    key = sys.stdin.read(1)
-                    cmds = {
-                        "t": (lambda: (controller.set_velocity(0, 0, 1.5, 0), print(">> Takeoff"))),
-                        "l": (
-                            lambda: (controller.set_velocity(0, 0, -0.5, 0), print(">> Landing"))
-                        ),
-                        "w": (lambda: (controller.set_velocity(2.0, 0, 0, 0), print(">> Forward"))),
-                        "s": (
-                            lambda: (controller.set_velocity(-2.0, 0, 0, 0), print(">> Backward"))
-                        ),
-                        "a": (
-                            lambda: (controller.set_velocity(0, 0, 0, -1.0), print(">> Yaw left"))
-                        ),
-                        "d": (
-                            lambda: (controller.set_velocity(0, 0, 0, 1.0), print(">> Yaw right"))
-                        ),
-                        "q": (
-                            lambda: (
-                                controller.set_velocity(0, -2.0, 0, 0),
-                                print(">> Strafe left"),
-                            )
-                        ),
-                        "e": (
-                            lambda: (
-                                controller.set_velocity(0, 2.0, 0, 0),
-                                print(">> Strafe right"),
-                            )
-                        ),
-                        "r": (lambda: (controller.set_velocity(0, 0, 1.0, 0), print(">> Alt up"))),
-                        "f": (
-                            lambda: (controller.set_velocity(0, 0, -1.0, 0), print(">> Alt down"))
-                        ),
-                        "x": (lambda: (controller.set_velocity(0, 0, 0, 0), print(">> Stop"))),
-                    }
-                    if key == "\x1b":
-                        break
-                    elif key in cmds:
-                        cmds[key]()
-
-                time.sleep(max(0, model.opt.timestep - 0.001))
-
-        finally:
-            if old_settings is not None:
-                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-            mujoco.set_mjcb_control(None)
-            bridge.stop()
-            print("Simulation stopped.")
+    try:
+        # launch() is blocking — it runs the viewer and calls mjcb_control each timestep.
+        # Works natively on macOS without mjpython.
+        mujoco.viewer.launch(model, data)
+    finally:
+        mujoco.set_mjcb_control(None)
+        bridge.stop()
+        print("Simulation stopped.")
 
 
 if __name__ == "__main__":

@@ -183,6 +183,7 @@ class DroneController:
         self.kp_yaw_rate = 1.5
         self.kp_yaw_angle = 3.0
         self.kd_yaw = 1.5
+        self.yaw_roll_ff = True  # yaw feedforward from roll (for asymmetric motors)
 
         self.cmd_vx = 0.0
         self.cmd_vy = 0.0
@@ -242,7 +243,8 @@ class DroneController:
         else:
             yaw_cmd = self.kp_yaw_rate * (self.cmd_yaw_rate - omega_body[2])
 
-        yaw_cmd += roll_cmd
+        if self.yaw_roll_ff:
+            yaw_cmd += roll_cmd
 
         t1 = base + pitch_cmd + roll_cmd - yaw_cmd
         t2 = base + pitch_cmd - roll_cmd + yaw_cmd
