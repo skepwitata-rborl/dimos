@@ -67,7 +67,9 @@ sim_parallel_eval = autoconnect(
     ReplanningAStarPlanner.blueprint(),
     WavefrontFrontierExplorer.blueprint(),
     # sim_spatial (isolated DB per instance)
-    SpatialMemory.blueprint(db_path=_db_path, visual_memory_path=_visual_memory_path, new_memory=True),
+    SpatialMemory.blueprint(
+        db_path=_db_path, visual_memory_path=_visual_memory_path, new_memory=True
+    ),
     # temporal_memory
     TemporalMemory.blueprint(),
 ).global_config(n_workers=8, robot_model="dimsim")

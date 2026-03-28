@@ -29,7 +29,9 @@ from dimos.robot.sim.blueprints.basic.sim_basic import sim_basic
 sim_nav = autoconnect(
     sim_basic,
     VoxelGridMapper.blueprint(voxel_size=0.1, publish_interval=0.5),
-    CostMapper.blueprint(algo="height_cost", config=HeightCostConfig(can_pass_under=1.5, smoothing=2.0)),
+    CostMapper.blueprint(
+        algo="height_cost", config=HeightCostConfig(can_pass_under=1.5, smoothing=2.0)
+    ),
     ReplanningAStarPlanner.blueprint(),
     WavefrontFrontierExplorer.blueprint(),
 ).global_config(n_workers=6, robot_model="dimsim")
