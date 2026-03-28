@@ -17,7 +17,7 @@
 3 dimos instances + 3 headless browser pages, 1 eval workflow each.
 Runs all workflows concurrently, cutting wall-clock time to ~1 min.
 
-    pytest test_dimsim_eval_parallel.py -v -s -m slow
+    pytest dimos/e2e_tests/test_dimsim_eval_parallel.py -v -s -m slow
 """
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -244,6 +244,7 @@ def parallel_env():
         env=env0,
         stdout=log0 or subprocess.DEVNULL,
         stderr=log0 or subprocess.DEVNULL,
+        start_new_session=True,
     )
     calls.append(call0)
 
@@ -272,6 +273,7 @@ def parallel_env():
                 env=env_i,
                 stdout=log_i or subprocess.DEVNULL,
                 stderr=log_i or subprocess.DEVNULL,
+                start_new_session=True,
             )
             calls.append(call_i)
 

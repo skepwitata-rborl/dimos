@@ -166,8 +166,20 @@ class DimSimTF(Module):
 
     @rpc
     def move(self, twist: Twist, duration: float = 0.0) -> bool:
-        """Send movement command to the simulator via cmd_vel."""
-        self.cmd_vel.publish(twist)
+        """Send movement command to the simulator via cmd_vel.
+
+        If *duration* > 0, publishes at 20 Hz for that many seconds then sends
+        a zero-velocity stop command.  If 0, publishes once (caller controls).
+        """
+        if duration > 0:
+            stop = Twist(linear=Vector3(0, 0, 0), angular=Vector3(0, 0, 0))
+            deadline = time.monotonic() + duration
+            while time.monotonic() < deadline:
+                self.cmd_vel.publish(twist)
+                time.sleep(0.05)
+            self.cmd_vel.publish(stop)
+        else:
+            self.cmd_vel.publish(twist)
         return True
 
 

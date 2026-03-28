@@ -37,6 +37,7 @@ import shutil
 from typing import TYPE_CHECKING
 
 from dimos import spec
+from dimos.core.core import rpc
 from dimos.core.native_module import NativeModule, NativeModuleConfig
 from dimos.utils.logging_config import setup_logger
 
@@ -110,6 +111,7 @@ class DimSimBridge(NativeModule, spec.Camera, spec.Pointcloud):
     # Control input (consumers publish cmd_vel to LCM, bridge reads it)
     cmd_vel: In[Twist]
 
+    @rpc
     def start(self) -> None:
         """Start the DimSim bridge subprocess.
 
@@ -251,6 +253,7 @@ class DimSimBridge(NativeModule, spec.Camera, spec.Pointcloud):
                                 capture_output=True,
                             )
                         dimsim_path = str(dimsim)
+                        self.config.executable = dimsim_path
                         downloaded = True
                         logger.info("dimsim binary installed.")
                     except Exception as exc:

@@ -17,7 +17,7 @@
 Starts dimos sim-nav headless (GPU rendering), then checks that all LCM
 topics are publishing and that cmd_vel actually moves the robot.
 
-    pytest test_sim_nav.py -v -s -m slow
+    pytest dimos/e2e_tests/test_dimsim_nav.py -v -s
 """
 
 import math
@@ -107,6 +107,7 @@ def sim_nav():
         env=env,
         stdout=log_file or subprocess.DEVNULL,
         stderr=log_file or subprocess.DEVNULL,
+        start_new_session=True,
     )
 
     try:

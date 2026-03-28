@@ -116,7 +116,7 @@ rerun_config = {
     },
 }
 
-match global_config.viewer_backend:
+match global_config.viewer:
     case "foxglove":
         from dimos.robot.foxglove_bridge import foxglove_bridge
 

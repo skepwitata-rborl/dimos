@@ -17,8 +17,8 @@
 Uses sim-eval blueprint (includes rerun/browser for manual observation).
 Run individual evals or all of them:
 
-    pytest test_sim_eval_sequential.py -v -s -m slow
-    pytest test_sim_eval_sequential.py::TestSimEvalSequential::test_go_to_tv -v -s -m slow
+    pytest dimos/e2e_tests/test_dimsim_eval.py -v -s -m slow
+    pytest dimos/e2e_tests/test_dimsim_eval.py::TestSimEvalSequential::test_go_to_tv -v -s -m slow
 """
 
 import json
@@ -161,6 +161,7 @@ def sim_eval():
         env=env,
         stdout=log_file or subprocess.DEVNULL,
         stderr=log_file or subprocess.DEVNULL,
+        start_new_session=True,
     )
 
     try:
