@@ -168,7 +168,7 @@ class pSHMTransport(PubSubTransport[T]):
     def __reduce__(self):  # type: ignore[no-untyped-def]
         return (pSHMTransport, (self.topic,), {"default_capacity": self._default_capacity})
 
-    def __setstate__(self, state: dict) -> None:  # type: ignore[no-untyped-def]
+    def __setstate__(self, state: dict[str, Any]) -> None:  # type: ignore[no-untyped-def]
         self._default_capacity = state.get("default_capacity")
         self.shm = PickleSharedMemory(default_capacity=self._default_capacity)
 
@@ -203,7 +203,7 @@ class SHMTransport(PubSubTransport[T]):
     def __reduce__(self):  # type: ignore[no-untyped-def]
         return (SHMTransport, (self.topic,), {"default_capacity": self._default_capacity})
 
-    def __setstate__(self, state: dict) -> None:  # type: ignore[no-untyped-def]
+    def __setstate__(self, state: dict[str, Any]) -> None:  # type: ignore[no-untyped-def]
         self._default_capacity = state.get("default_capacity")
         self.shm = BytesSharedMemory(default_capacity=self._default_capacity)
 
