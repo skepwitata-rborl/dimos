@@ -108,18 +108,18 @@ unitree_g1_nav_onboard = (
             init_pose=[0.0, 0.0, 1.2, 1.0, 0.0, 0.0, 0.0],
             map_freq=1.0,
         ),
-        SensorScanGeneration.blueprint(),
-        TerrainAnalysis.blueprint(
-            extra_args=[
-                "--obstacleHeightThre",
-                "0.2",
-                "--maxRelZ",
-                "1.5",
-                "--vehicleHeight",
-                "1.2",
-            ]
-        ),
-        TerrainMapExt.blueprint(),
+        # SensorScanGeneration.blueprint(),
+        # TerrainAnalysis.blueprint(
+        #     extra_args=[
+        #         "--obstacleHeightThre",
+        #         "0.2",
+        #         "--maxRelZ",
+        #         "1.5",
+        #         "--vehicleHeight",
+        #         "1.2",
+        #     ]
+        # ),
+        # TerrainMapExt.blueprint(),
         FarPlanner.blueprint(
             sensor_range=30.0,
             visibility_range=25.0,
@@ -177,7 +177,7 @@ unitree_g1_nav_onboard = (
             (TerrainAnalysis, "odometry", "corrected_odometry"),
         ]
     )
-    .global_config(n_workers=8, robot_model="unitree_g1")
+    .global_config(n_workers=12, robot_model="unitree_g1")
 )
 
 
