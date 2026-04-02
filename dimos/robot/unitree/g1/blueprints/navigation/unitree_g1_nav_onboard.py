@@ -141,7 +141,7 @@ unitree_g1_nav_onboard = (
         TerrainAnalysis.blueprint(
             extra_args=[
                 # Input filtering
-                "--scanVoxelSize", "0.05",          # input point downsampling (m)
+                "--scanVoxelSize", "0.15",          # input point downsampling (m) — default 0.05, increased to reduce terrain_map density
                 # Voxel grid
                 "--terrainVoxelSize", "1.0",         # grid cell size (m)
                 "--terrainVoxelHalfWidth", "10",     # grid radius in cells (→ 21×21)
@@ -155,14 +155,14 @@ unitree_g1_nav_onboard = (
                 "--quantileZ", "0.25",               # ground height quantile
                 # Decay and clearing
                 "--decayTime", "2.0",                # point persistence (s)
-                "--noDecayDis", "4.0",               # no-decay radius around robot (m)
+                "--noDecayDis", "1.5",               # no-decay radius around robot (m) — default 4.0, reduced to prevent unbounded growth when stationary
                 "--clearingDis", "8.0",              # dynamic clearing distance (m)
                 "--clearDyObs", "true",              # clear dynamic obstacles
                 "--noDataObstacle", "false",         # treat unseen voxels as obstacles
                 "--noDataBlockSkipNum", "0",         # skip N blocks with no data
                 "--minBlockPointNum", "10",          # min points per block for classification
                 # Voxel culling
-                "--voxelPointUpdateThre", "5",       # cull voxel after N points (default 100, reduced to limit terrain_map bandwidth)
+                "--voxelPointUpdateThre", "30",      # reprocess voxel after N points (default 100)
                 "--voxelTimeUpdateThre", "2.0",      # cull voxel after N seconds
                 # Dynamic obstacle filtering
                 "--minDyObsDis", "0.14",             # min distance for dynamic obstacle detection (m)
