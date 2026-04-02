@@ -46,6 +46,21 @@ from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.msgs.vision_msgs.Detection3D import Detection3D
 
 
+def _autocolor(item: Any, group: str, cmap: str = "turbo") -> Color | None:
+    """Extract a Color from an item, or None if not auto-colorable."""
+    if isinstance(item, EmbeddedObservation):
+        return Color(group, item.similarity or 0.0, cmap=cmap)
+    if isinstance(item, Observation):
+        if item.data_type == float:
+            return Color(group, item.data, cmap=cmap)
+        if item.data_type == int:
+            return Color(group, item.data, cmap=cmap)
+        return Color(group, item.ts, cmap=cmap)
+    if isinstance(item, (int, float)):
+        return Color(group, float(item), cmap=cmap)
+    return None
+
+
 class Drawing2D:
     """Accumulates scene elements for spatial 2D visualization.
 
@@ -77,8 +92,15 @@ class Drawing2D:
         elif isinstance(element, Observation):
             self.add_observation(element, **kwargs)
         elif hasattr(element, "__iter__"):
+            self._group_seq = getattr(self, "_group_seq", 0) + 1
+            group = f"auto_{self._group_seq}"
+            cmap = kwargs.pop("cmap", "turbo")
             for item in element:
-                self.add(item, **kwargs)
+                c = _autocolor(item, group, cmap=cmap)
+                if c is not None and isinstance(item, Observation):
+                    self._elements.append(Arrow(msg=item.pose_stamped, color=c))
+                else:
+                    self.add(item, **kwargs)
         else:
             raise TypeError(
                 f"Drawing2D.add() does not know how to handle {type(element).__name__}. "
@@ -126,14 +148,8 @@ class Drawing2D:
         )
 
     def add_observation(self, obs: Observation[Any], **kwargs: Any) -> None:
-        """Smart dispatch: decompose if data is a known vis msg, else store whole."""
-        _DECOMPOSABLE = (PoseStamped, GeoPose, GeoPoint, NavPath, Detection3D)
-        data = obs.data
-        if isinstance(data, _DECOMPOSABLE):
-            self.add_dimos_msg(data, **kwargs)
-        else:
-            color = kwargs.pop("color", Color("time", obs.ts, cmap="turbo"))
-            self._elements.append(Pose(msg=obs.pose_stamped, color=color, **kwargs))
+        """Store the observation directly; renderers decide how to display it."""
+        self._elements.append(obs)
 
     def base_map(self, grid: OccupancyGrid) -> Drawing2D:
         """Add an OccupancyGrid as the background map."""

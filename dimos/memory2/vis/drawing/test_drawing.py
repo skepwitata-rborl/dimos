@@ -187,7 +187,7 @@ class TestDrawingObservations:
         assert isinstance(el, Observation)
         assert el.data == "some_data"
 
-    def test_posestamped_observation_decomposed(self):
+    def test_posestamped_observation_stored_as_observation(self):
         from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped as PS
 
         obs = Observation(id=3, ts=3.0, pose=(1, 2, 0, 0, 0, 0, 1), _data=PS(5, 2, 0))
@@ -195,10 +195,10 @@ class TestDrawingObservations:
         d = Drawing()
         d.add(obs)
         el = d.elements[0]
-        assert isinstance(el, Pose)
-        assert el.msg.x == pytest.approx(5.0)
+        assert isinstance(el, Observation)
+        assert el.data.x == pytest.approx(5.0)
 
-    def test_embedded_observation_stored_as_observation(self):
+    def test_embedded_observation_stored_as_arrow(self):
         obs = EmbeddedObservation(
             id=0,
             ts=0.0,
@@ -211,7 +211,7 @@ class TestDrawingObservations:
         d.add(obs)
         assert len(d) == 1
         el = d.elements[0]
-        assert isinstance(el, EmbeddedObservation)
+        assert isinstance(el, Arrow)
 
 
 class TestDrawingConvenience:
@@ -262,19 +262,18 @@ class TestSVGRender:
         assert "red" in svg
         assert "hi" in svg
 
-    def test_pose_renders_circle_and_arrow(self):
+    def test_pose_renders_polygon(self):
         d = Drawing()
         d.add(Pose(PoseStamped(1, 2, 0), color="blue"))
         svg = d.to_svg()
-        assert "<circle" in svg
-        assert "<line" in svg
+        assert "<polygon" in svg
         assert "blue" in svg
 
-    def test_arrow_renders_line(self):
+    def test_arrow_renders_polygon(self):
         d = Drawing()
         d.add(Arrow(PoseStamped(0, 0, 0, 0, 0, 0.38, 0.92), color="orange"))
         svg = d.to_svg()
-        assert "<line" in svg
+        assert "<polygon" in svg
         assert "orange" in svg
 
     def test_polyline_renders(self):
@@ -330,9 +329,9 @@ class TestSVGRender:
         d.add(Point(GeoPoint(5, 5, 0), color="green", label="goal"))
         d.add(Text((0, 0, 0), "test"))
         svg = d.to_svg()
-        assert svg.count("<circle") == 2  # pose dot + point dot
+        assert svg.count("<circle") == 1  # point dot
+        assert svg.count("<polygon") == 2  # pose + arrow
         assert "<text" in svg
-        assert "<line" in svg
 
     def test_to_svg_writes_file(self, tmp_path):
         d = Drawing()

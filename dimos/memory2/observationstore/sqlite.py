@@ -282,7 +282,7 @@ class SqliteObservationStore(ObservationStore[T]):
             f'CREATE TABLE IF NOT EXISTS "{self._name}" ('
             "    id      INTEGER PRIMARY KEY AUTOINCREMENT,"
             "    ts      REAL    NOT NULL UNIQUE,"
-            "    value   REAL,"
+            "    value   NUMERIC,"
             "    pose_x  REAL, pose_y REAL, pose_z REAL,"
             "    pose_qx REAL, pose_qy REAL, pose_qz REAL, pose_qw REAL,"
             "    tags    BLOB    DEFAULT (jsonb('{}'))"
@@ -356,7 +356,7 @@ class SqliteObservationStore(ObservationStore[T]):
     def insert(self, obs: Observation[T]) -> int:
         pose = _decompose_pose(obs.pose)
         tags_json = json.dumps(obs.tags) if obs.tags else "{}"
-        value = float(obs._data) if isinstance(obs._data, (int, float)) else None
+        value = obs._data if isinstance(obs._data, (int, float)) else None
 
         with self._lock:
             if obs.tags:

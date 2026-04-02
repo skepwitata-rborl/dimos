@@ -61,6 +61,10 @@ class StreamAccessor:
         names = object.__getattribute__(self, "_store").list_streams()
         return f"StreamAccessor({names})"
 
+    def items(self) -> list[tuple[str, Stream[Any]]]:
+        store: Store = object.__getattribute__(self, "_store")
+        return [(name, store.stream(name)) for name in store.list_streams()]
+
 
 class StoreConfig(BaseConfig):
     """Store-level config. These are defaults inherited by all streams.
