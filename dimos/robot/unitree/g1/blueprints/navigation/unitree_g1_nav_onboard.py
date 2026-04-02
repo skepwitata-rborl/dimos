@@ -96,6 +96,7 @@ _rerun_config = {
         "world/floor": static_floor,
         "world/tf/robot": static_robot,
     },
+    "memory_limit": "1GB",
 }
 
 unitree_g1_nav_onboard = (
@@ -108,7 +109,7 @@ unitree_g1_nav_onboard = (
             init_pose=[0.0, 0.0, 1.2, 1.0, 0.0, 0.0, 0.0],
             map_freq=1.0,
         ),
-        SensorScanGeneration.blueprint(),
+        # SensorScanGeneration.blueprint(),
         TerrainAnalysis.blueprint(
             extra_args=[
                 "--obstacleHeightThre",
@@ -117,6 +118,8 @@ unitree_g1_nav_onboard = (
                 "1.5",
                 "--vehicleHeight",
                 "1.2",
+                "--voxelPointUpdateThre",
+                "30",
             ]
         ),
         TerrainMapExt.blueprint(),
