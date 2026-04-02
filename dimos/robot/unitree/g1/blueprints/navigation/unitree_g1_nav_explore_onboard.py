@@ -54,6 +54,7 @@ from dimos.navigation.smartnav.modules.tare_planner.tare_planner import TarePlan
 from dimos.navigation.smartnav.modules.terrain_analysis.terrain_analysis import TerrainAnalysis
 from dimos.navigation.smartnav.modules.terrain_map_ext.terrain_map_ext import TerrainMapExt
 from dimos.protocol.pubsub.impl.lcmpubsub import LCM
+from dimos.robot.unitree.g1.config import G1
 from dimos.robot.unitree.g1.effectors.high_level.dds_sdk import G1HighLevelDdsSdk
 from dimos.visualization.rerun.bridge import RerunBridgeModule, _resolve_viewer_mode
 
@@ -90,15 +91,14 @@ unitree_g1_nav_explore_onboard = (
         FastLio2.blueprint(
             host_ip=os.getenv("LIDAR_HOST_IP", "192.168.123.164"),
             lidar_ip=os.getenv("LIDAR_IP", "192.168.123.120"),
-            # G1 lidar mount: 1.2m height, 180° around X (upside-down mount)
-            init_pose=[0.0, 0.0, 1.2, 1.0, 0.0, 0.0, 0.0],
+            mount=G1.internal_odom_offsets["mid360_link"],
             map_freq=0.0,  # GlobalMap handles accumulation
         ),
         SensorScanGeneration.blueprint(),
         TerrainAnalysis.blueprint(
             obstacle_height_thre=0.2,
             max_rel_z=1.5,
-            vehicle_height=1.2,
+            vehicle_height=G1.height_clearance,
         ),
         TerrainMapExt.blueprint(),
         TarePlanner.blueprint(),

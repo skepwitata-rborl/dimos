@@ -35,7 +35,6 @@ from pathlib import Path
 import socket
 from typing import TYPE_CHECKING, Annotated
 
-from pydantic import field_validator
 from pydantic.experimental.pipeline import validate_as
 
 from dimos.core.native_module import NativeModule, NativeModuleConfig
@@ -52,6 +51,7 @@ from dimos.hardware.sensors.lidar.livox.ports import (
     SDK_POINT_DATA_PORT,
     SDK_PUSH_MSG_PORT,
 )
+from dimos.msgs.geometry_msgs.Pose import Pose
 from dimos.msgs.nav_msgs.Odometry import Odometry
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.spec import mapping, perception
@@ -118,19 +118,9 @@ class FastLio2Config(NativeModuleConfig):
     lidar_ip: str = "192.168.1.155"
     frequency: float = 10.0
 
-    # Initial pose offset [x, y, z, qx, qy, qz, qw] applied to all SLAM outputs.
-    # Set z to sensor mount height above ground for correct terrain analysis.
-    # Quaternion (qx, qy, qz, qw) for angled mounts; identity = [0,0,0, 0,0,0,1].
-    init_pose: list[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
-
-    @field_validator("init_pose")
-    @classmethod
-    def _check_init_pose_length(cls, v: list[float]) -> list[float]:
-        if len(v) != 7:
-            raise ValueError(
-                f"init_pose must have exactly 7 elements [x,y,z,qx,qy,qz,qw], got {len(v)}"
-            )
-        return v
+    # Sensor mount pose — position + orientation of the sensor relative to ground.
+    # Converted to init_pose CLI arg [x, y, z, qx, qy, qz, qw] in model_post_init.
+    mount: Pose = Pose()
 
     # Frame IDs for output messages
     frame_id: str = "map"
@@ -175,17 +165,27 @@ class FastLio2Config(NativeModuleConfig):
     # Passed as --config_path to the binary (resolved from ``config`` in post-init)
     config_path: str | None = None
 
-    # config is not a CLI arg (config_path is the resolved version)
-    cli_exclude: frozenset[str] = frozenset({"config"})
+    # init_pose is computed from mount; config is resolved to config_path
+    init_pose: list[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+    cli_exclude: frozenset[str] = frozenset({"config", "mount"})
 
     def model_post_init(self, __context: object) -> None:
-        """Resolve config_path from the config YAML field."""
+        """Resolve config_path and compute init_pose from mount."""
         super().model_post_init(__context)
-        # The validate_as pipeline may not fire for defaults, so resolve here.
         cfg = self.config
         if not cfg.is_absolute():
             cfg = _CONFIG_DIR / cfg
         self.config_path = str(cfg.resolve())
+        m = self.mount
+        self.init_pose = [
+            m.x,
+            m.y,
+            m.z,
+            m.orientation.x,
+            m.orientation.y,
+            m.orientation.z,
+            m.orientation.w,
+        ]
 
 
 class FastLio2(

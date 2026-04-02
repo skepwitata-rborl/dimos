@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from dimos.core.native_module import NativeModule, NativeModuleConfig
 from dimos.core.stream import In, Out
+from dimos.msgs.geometry_msgs.Pose import Pose
 from dimos.msgs.nav_msgs.Odometry import Odometry
 from dimos.msgs.sensor_msgs.Imu import Imu
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
@@ -61,13 +62,29 @@ class AriseSLAMConfig(NativeModuleConfig):
     publish_map: bool = False
     map_publish_rate: float = 0.2
 
-    # Initial pose
+    # Sensor mount pose — position + orientation of the sensor relative to ground.
+    # Converted to init_x/y/z/roll/pitch/yaw CLI args in model_post_init.
+    mount: Pose = Pose()
+
+    # init_* fields are computed from mount; mount itself is not a CLI arg
     init_x: float = 0.0
     init_y: float = 0.0
     init_z: float = 0.0
     init_roll: float = 0.0
     init_pitch: float = 0.0
     init_yaw: float = 0.0
+
+    cli_exclude: frozenset[str] = frozenset({"mount"})
+
+    def model_post_init(self, __context: object) -> None:
+        """Compute init_x/y/z/roll/pitch/yaw from mount."""
+        super().model_post_init(__context)
+        self.init_x = self.mount.x
+        self.init_y = self.mount.y
+        self.init_z = self.mount.z
+        self.init_roll = self.mount.roll
+        self.init_pitch = self.mount.pitch
+        self.init_yaw = self.mount.yaw
 
 
 class AriseSLAM(NativeModule):

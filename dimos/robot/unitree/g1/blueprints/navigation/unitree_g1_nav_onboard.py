@@ -61,12 +61,10 @@ from dimos.navigation.smartnav.modules.far_planner.far_planner import FarPlanner
 from dimos.navigation.smartnav.modules.local_planner.local_planner import LocalPlanner
 from dimos.navigation.smartnav.modules.path_follower.path_follower import PathFollower
 from dimos.navigation.smartnav.modules.pgo.pgo import PGO
-from dimos.navigation.smartnav.modules.sensor_scan_generation.sensor_scan_generation import (
-    SensorScanGeneration,
-)
 from dimos.navigation.smartnav.modules.terrain_analysis.terrain_analysis import TerrainAnalysis
 from dimos.navigation.smartnav.modules.terrain_map_ext.terrain_map_ext import TerrainMapExt
 from dimos.protocol.pubsub.impl.lcmpubsub import LCM
+from dimos.robot.unitree.g1.config import G1
 from dimos.robot.unitree.g1.effectors.high_level.dds_sdk import G1HighLevelDdsSdk
 from dimos.visualization.rerun.bridge import RerunBridgeModule, _resolve_viewer_mode
 from dimos.visualization.rerun.websocket_server import RerunWebSocketServer
@@ -132,55 +130,53 @@ unitree_g1_nav_onboard = (
         FastLio2.blueprint(
             host_ip=os.getenv("LIDAR_HOST_IP", "192.168.123.164"),
             lidar_ip=os.getenv("LIDAR_IP", "192.168.123.120"),
-            # G1 lidar mount: 1.2m height, 180° around X (upside-down mount)
-            # [x, y, z, qx, qy, qz, qw] — quaternion (1,0,0,0) = 180° X rotation
-            init_pose=[0.0, 0.0, 1.2, 1.0, 0.0, 0.0, 0.0],
+            mount=G1.internal_odom_offsets["mid360_link"],
             map_freq=1.0,
         ),
         # SensorScanGeneration.blueprint(),
         TerrainAnalysis.blueprint(
             # Input filtering
-            scan_voxel_size=0.15,          # input point downsampling (m) — default 0.05, increased to reduce terrain_map density
+            scan_voxel_size=0.15,  # input point downsampling (m) — default 0.05, increased to reduce terrain_map density
             # Voxel grid
-            terrain_voxel_size=1.0,        # grid cell size (m)
-            terrain_voxel_half_width=10,   # grid radius in cells (→ 21×21)
+            terrain_voxel_size=1.0,  # grid cell size (m)
+            terrain_voxel_half_width=10,  # grid radius in cells (→ 21×21)
             # Obstacle/ground classification
-            obstacle_height_thre=0.2,      # above this = hard obstacle (m)
-            ground_height_thre=0.1,        # below this = ground for cost mode (m)
-            vehicle_height=1.2,            # ignore points above this (m)
-            min_rel_z=-1.5,                # height filter min relative to robot (m)
-            max_rel_z=1.5,                 # height filter max relative to robot (m)
-            use_sorting=True,              # quantile-based ground estimation
-            quantile_z=0.25,               # ground height quantile
+            obstacle_height_thre=0.2,  # above this = hard obstacle (m)
+            ground_height_thre=0.1,  # below this = ground for cost mode (m)
+            vehicle_height=G1.height_clearance,  # ignore points above this (m)
+            min_rel_z=-1.5,  # height filter min relative to robot (m)
+            max_rel_z=1.5,  # height filter max relative to robot (m)
+            use_sorting=True,  # quantile-based ground estimation
+            quantile_z=0.25,  # ground height quantile
             # Decay and clearing
-            decay_time=2.0,                # point persistence (s)
-            no_decay_dis=1.5,              # no-decay radius around robot (m) — default 4.0, reduced to prevent unbounded growth when stationary
-            clearing_dis=8.0,              # dynamic clearing distance (m)
-            clear_dy_obs=True,             # clear dynamic obstacles
-            no_data_obstacle=False,        # treat unseen voxels as obstacles
-            no_data_block_skip_num=0,      # skip N blocks with no data
-            min_block_point_num=10,        # min points per block for classification
+            decay_time=2.0,  # point persistence (s)
+            no_decay_dis=1.5,  # no-decay radius around robot (m) — default 4.0, reduced to prevent unbounded growth when stationary
+            clearing_dis=8.0,  # dynamic clearing distance (m)
+            clear_dy_obs=True,  # clear dynamic obstacles
+            no_data_obstacle=False,  # treat unseen voxels as obstacles
+            no_data_block_skip_num=0,  # skip N blocks with no data
+            min_block_point_num=10,  # min points per block for classification
             # Voxel culling
-            voxel_point_update_thre=30,    # reprocess voxel after N points (default 100)
-            voxel_time_update_thre=2.0,    # cull voxel after N seconds
+            voxel_point_update_thre=30,  # reprocess voxel after N points (default 100)
+            voxel_time_update_thre=2.0,  # cull voxel after N seconds
             # Dynamic obstacle filtering
-            min_dy_obs_dis=0.14,           # min distance for dynamic obstacle detection (m)
-            abs_dy_obs_rel_z_thre=0.2,     # z threshold for dynamic obstacles (m)
-            min_dy_obs_vfov=-55.0,         # min vertical FOV for dynamic obs (deg)
-            max_dy_obs_vfov=10.0,          # max vertical FOV for dynamic obs (deg)
-            min_dy_obs_point_num=1,        # min points for dynamic obstacle
-            min_out_of_fov_point_num=20,   # min out-of-FOV points
+            min_dy_obs_dis=0.14,  # min distance for dynamic obstacle detection (m)
+            abs_dy_obs_rel_z_thre=0.2,  # z threshold for dynamic obstacles (m)
+            min_dy_obs_vfov=-55.0,  # min vertical FOV for dynamic obs (deg)
+            max_dy_obs_vfov=10.0,  # max vertical FOV for dynamic obs (deg)
+            min_dy_obs_point_num=1,  # min points for dynamic obstacle
+            min_out_of_fov_point_num=20,  # min out-of-FOV points
             # Ground lift limits
-            consider_drop=False,           # consider terrain drops
-            limit_ground_lift=False,       # limit ground plane lift
-            max_ground_lift=0.15,          # max ground lift (m)
-            dis_ratio_z=0.2,              # distance-to-z ratio for filtering
+            consider_drop=False,  # consider terrain drops
+            limit_ground_lift=False,  # limit ground plane lift
+            max_ground_lift=0.15,  # max ground lift (m)
+            dis_ratio_z=0.2,  # distance-to-z ratio for filtering
         ),
         TerrainMapExt.blueprint(
-            voxel_size=0.4,      # meters per voxel (coarser than local terrain)
-            decay_time=8.0,      # seconds before points expire
-            publish_rate=2.0,    # Hz
-            max_range=40.0,      # max distance from robot to keep (m)
+            voxel_size=0.4,  # meters per voxel (coarser than local terrain)
+            decay_time=8.0,  # seconds before points expire
+            publish_rate=2.0,  # Hz
+            max_range=40.0,  # max distance from robot to keep (m)
         ),
         FarPlanner.blueprint(
             sensor_range=30.0,
