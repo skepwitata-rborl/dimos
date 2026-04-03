@@ -153,6 +153,8 @@ _smart_nav = autoconnect(
     CmdVelMux.blueprint(),
 ).remappings(
     [
+        # PathFollower cmd_vel → CmdVelMux nav input (avoid collision with mux output)
+        (PathFollower, "cmd_vel", "nav_cmd_vel"),
         # Global-scale planners use PGO-corrected odometry (per CMU ICRA 2022):
         # "Loop closure adjustments are used by the high-level planners since
         # they are in charge of planning at the global scale. Modules such as
@@ -197,6 +199,8 @@ _smart_nav_sim = autoconnect(
     CmdVelMux.blueprint(),
 ).remappings(
     [
+        # PathFollower cmd_vel → CmdVelMux nav input (avoid collision with mux output)
+        (PathFollower, "cmd_vel", "nav_cmd_vel"),
         (FarPlanner, "odometry", "corrected_odometry"),
         (ClickToGoal, "odometry", "corrected_odometry"),
         (TerrainAnalysis, "odometry", "corrected_odometry"),

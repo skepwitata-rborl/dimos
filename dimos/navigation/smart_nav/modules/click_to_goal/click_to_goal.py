@@ -29,6 +29,7 @@ from typing import Any
 
 from dimos_lcm.std_msgs import Bool  # type: ignore[import-untyped]
 
+from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
 from dimos.core.stream import In, Out
 from dimos.msgs.geometry_msgs.PointStamped import PointStamped
@@ -64,6 +65,7 @@ class ClickToGoal(Module[ModuleConfig]):
         self._robot_x = 0.0
         self._robot_y = 0.0
         self._robot_z = 0.0
+        self._initial_goal_sent = False
 
     def __getstate__(self) -> dict[str, Any]:
         state = super().__getstate__()
@@ -74,6 +76,7 @@ class ClickToGoal(Module[ModuleConfig]):
         super().__setstate__(state)
         self._lock = threading.Lock()
 
+    @rpc
     def start(self) -> None:
         self.odometry._transport.subscribe(self._on_odom)
         self.clicked_point._transport.subscribe(self._on_click)
@@ -84,6 +87,21 @@ class ClickToGoal(Module[ModuleConfig]):
             self._robot_x = msg.pose.position.x
             self._robot_y = msg.pose.position.y
             self._robot_z = msg.pose.position.z
+            if not self._initial_goal_sent:
+                self._initial_goal_sent = True
+                # Set the initial goal to the robot's current position so the
+                # local planner doesn't chase its default (0,0) goal on startup.
+                here = PointStamped(
+                    ts=time.time(),
+                    frame_id="map",
+                    x=self._robot_x,
+                    y=self._robot_y,
+                    z=self._robot_z,
+                )
+                # Only anchor the local planner — don't send to FAR planner's
+                # goal input, as it causes FAR to enter "goal reached" idle state
+                # and stop processing new goals promptly.
+                self.way_point.publish(here)
 
     def _on_click(self, msg: PointStamped) -> None:
         # Reject invalid clicks (sky/background gives inf or huge coords)
@@ -100,8 +118,8 @@ class ClickToGoal(Module[ModuleConfig]):
             rx, ry, rz = self._robot_x, self._robot_y, self._robot_z
 
         print(f"[click_to_goal] Goal: ({msg.x:.1f}, {msg.y:.1f}, {msg.z:.1f})")
-        self.way_point._transport.publish(msg)
-        self.goal._transport.publish(msg)
+        self.way_point.publish(msg)
+        self.goal.publish(msg)
 
         # Publish a straight-line path from robot to goal for visualization
         now = time.time()
@@ -116,7 +134,7 @@ class ClickToGoal(Module[ModuleConfig]):
                 orientation=[0, 0, 0, 1],
             ),
         ]
-        self.goal_path._transport.publish(Path(ts=now, frame_id="map", poses=poses))
+        self.goal_path.publish(Path(ts=now, frame_id="map", poses=poses))
 
     def _on_stop_movement(self, msg: Bool) -> None:
         """Cancel navigation by setting the goal to the robot's current position."""
@@ -127,5 +145,5 @@ class ClickToGoal(Module[ModuleConfig]):
             rx, ry, rz = self._robot_x, self._robot_y, self._robot_z
 
         here = PointStamped(ts=time.time(), frame_id="map", x=rx, y=ry, z=rz)
-        self.way_point._transport.publish(here)
-        self.goal._transport.publish(here)
+        self.way_point.publish(here)
+        self.goal.publish(here)

@@ -102,10 +102,10 @@ class LocalPlannerConfig(NativeModuleConfig):
 
     # Minimum clearance around goal position for path planning (m).
     goal_clearance: float = 0.5
-    # Goal x-coordinate in local frame (m).
-    goal_x: float = 0.0
-    # Goal y-coordinate in local frame (m).
-    goal_y: float = 0.0
+    # Goal x-coordinate in local frame (m). None = omit from CLI (binary default).
+    goal_x: float | None = None
+    # Goal y-coordinate in local frame (m). None = omit from CLI (binary default).
+    goal_y: float | None = None
 
 
 class LocalPlanner(NativeModule):
