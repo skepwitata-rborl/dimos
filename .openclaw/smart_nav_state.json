@@ -1,0 +1,9 @@
+{
+  "phase": "p0 nearly passing, teleop verified working",
+  "status": "working",
+  "last_test_result": "p0 FORWARD: 6.9s ✓. p0 BACKWARD: 9s (Y-oscillation). Teleop: works correctly when using proper Twist constructor. 1s lag after teleop stop is by design (cooldown_sec=1.0).",
+  "p0_passed": false,
+  "p1_p2_passed": false,
+  "teleop_passed": true,
+  "notes": "Summary of fixes: (1) maxYawRate 1.5→80 deg/s [CRITICAL], (2) omniDirGoalThre/DiffThre large values for full omni-dir acceleration, (3) freezeAng 90→180 to prevent freeze pauses, (4) converge_dist 0.4→0.8, (5) slowDwnDisThre 0.2→1.0, (6) maxRelZ 1.5→0.3. p0 backward direction still has Y-oscillation (~2m drift). Need to investigate local planner backward path group selection quality."
+}
