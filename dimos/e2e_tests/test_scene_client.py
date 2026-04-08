@@ -160,7 +160,9 @@ class TestSceneClient:
     def test_set_fog(self, scene):
         """set_fog creates fog on the scene."""
         scene.set_fog(color=0xCCCCCC, near=5, far=30)
-        result = scene.exec("return scene.fog ? { near: scene.fog.near, far: scene.fog.far } : null;")
+        result = scene.exec(
+            "return scene.fog ? { near: scene.fog.near, far: scene.fog.far } : null;"
+        )
         assert result is not None
         assert result["near"] == 5
         assert result["far"] == 30

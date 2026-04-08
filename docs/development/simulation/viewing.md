@@ -31,5 +31,3 @@ Press **G** to toggle ghost mode. In ghost mode, the camera passes through walls
 ## Robot View
 
 The robot's sensor feed (color image, depth, LiDAR) is now only visible in rerun, not in the browser. The browser shows the 3D world from your camera angle while rerun shows what the robot sees.
-
-

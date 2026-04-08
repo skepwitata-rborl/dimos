@@ -38,11 +38,11 @@ Or as a context manager::
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import shutil
 import threading
-import uuid
-from pathlib import Path
 from typing import Any
+import uuid
 
 import websocket
 
@@ -88,7 +88,7 @@ EMBODIMENT_PRESETS: dict[str, dict[str, Any]] = {
         "embodimentType": "quadruped",  # ground physics
         "avatarUrl": ["/agent-model/robot.glb"],
         "maxSpeed": 2.0,
-        "turnRate": 2.5,    # differential drive turns by wheel speed diff
+        "turnRate": 2.5,  # differential drive turns by wheel speed diff
         "gravity": -9.81,
         "maxStepHeight": 0.05,  # small wheels can't climb steps
         "maxSlopeAngle": 20,
@@ -100,7 +100,7 @@ EMBODIMENT_PRESETS: dict[str, dict[str, Any]] = {
         "embodimentType": "quadruped",  # ground physics
         "avatarUrl": ["/agent-model/robot.glb"],
         "maxSpeed": 5.0,
-        "turnRate": 1.2,    # car-like: slow turn rate (limited steering angle)
+        "turnRate": 1.2,  # car-like: slow turn rate (limited steering angle)
         "gravity": -9.81,
         "maxStepHeight": 0.1,
         "maxSlopeAngle": 30,
@@ -112,7 +112,7 @@ EMBODIMENT_PRESETS: dict[str, dict[str, Any]] = {
         "embodimentType": "quadruped",  # ground physics (strafing via cmd_vel.linear.y)
         "avatarUrl": ["/agent-model/robot.glb"],
         "maxSpeed": 2.5,
-        "turnRate": 4.0,    # omnidirectional: fast rotation
+        "turnRate": 4.0,  # omnidirectional: fast rotation
         "gravity": -9.81,
         "maxStepHeight": 0.05,
         "maxSlopeAngle": 15,
@@ -126,7 +126,7 @@ EMBODIMENT_PRESETS: dict[str, dict[str, Any]] = {
         "maxSpeed": 1.5,
         "turnRate": 2.0,
         "gravity": -9.81,
-        "maxStepHeight": 0.3,   # can step over things
+        "maxStepHeight": 0.3,  # can step over things
         "maxSlopeAngle": 45,
     },
     "small-robot": {
@@ -150,7 +150,7 @@ EMBODIMENT_PRESETS: dict[str, dict[str, Any]] = {
         "avatarUrl": ["/agent-model/robot.glb"],
         "maxSpeed": 5.0,
         "turnRate": 4.0,
-        "gravity": 0,          # no gravity in flight
+        "gravity": 0,  # no gravity in flight
         "maxAltitude": 20.0,
     },
 }
@@ -247,7 +247,7 @@ class SceneClient:
                 pass
         self._ws = None
 
-    def __enter__(self) -> "SceneClient":
+    def __enter__(self) -> SceneClient:
         return self
 
     def __exit__(self, *args: Any) -> None:
@@ -344,7 +344,11 @@ class SceneClient:
             ``{name, uuid, collider, scaleFactor}`` info about the loaded model.
         """
         name_js = f"model.name = {json.dumps(name)};" if name else ""
-        collider_js = f"const col = addCollider(model, {json.dumps(collider)});" if collider else "const col = null;"
+        collider_js = (
+            f"const col = addCollider(model, {json.dumps(collider)});"
+            if collider
+            else "const col = null;"
+        )
         if auto_scale is False:
             auto_scale_js = "const scaleFactor = 1.0;"
         else:
@@ -555,7 +559,7 @@ return removeCollider(obj);
             d = size[2] if len(size) > 2 else 1
             geom_js = f"new THREE.BoxGeometry({w}, {h}, {d})"
 
-        name_js = f'mesh.name = {json.dumps(name)};' if name else ""
+        name_js = f"mesh.name = {json.dumps(name)};" if name else ""
 
         if collider:
             opts = {"shape": collider, "dynamic": dynamic, "mass": mass, "restitution": restitution}
@@ -897,5 +901,4 @@ return { x: p.x, y: p.y, z: p.z };
         return self.exec(code)
 
 
-
-__all__ = ["SceneClient", "SceneExecError", "EMBODIMENT_PRESETS"]
+__all__ = ["EMBODIMENT_PRESETS", "SceneClient", "SceneExecError"]

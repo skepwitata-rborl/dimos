@@ -3,9 +3,9 @@
 DimSim is a browser-based 3D simulator that provides the same sensor and control interface as physical robots. When you run any `sim-*` blueprint, dimos automatically downloads and launches DimSim — no manual setup or external dependencies required.
 
 **Sub-pages:**
-- [Scene Editing SDK](scene_editing.md) — Load custom scenes, swap embodiments, add objects at runtime
-- [Viewing & Navigation](viewing.md) — Browser controls, god view, keyboard shortcuts
-- [Evals](evals.md) — Running, creating, and rubric types *(in progress)*
+- [Scene Editing SDK](/docs/development/simulation/scene_editing.md) — Load custom scenes, swap embodiments, add objects at runtime
+- [Viewing & Navigation](/docs/development/simulation/viewing.md) — Browser controls, god view, keyboard shortcuts
+- [Evals](/docs/development/simulation/evals.md) — Running, creating, and rubric types *(in progress)*
 
 ## Running
 
@@ -81,7 +81,7 @@ Headless mode defaults to cpu usage. If gpu is available run with `DIMSIM_RENDER
 
 ## Evals
 
-See [Evals](evals.md) — running, creating, and rubric types. *(in progress)*
+See [Evals](/docs/development/simulation/evals.md) — running, creating, and rubric types. *(in progress)*
 
 ## Environment Variables
 

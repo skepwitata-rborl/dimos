@@ -129,7 +129,8 @@ def _static_camera_pinhole(rr: Any) -> list[Any]:
         rr.Pinhole(
             focal_length=[fx, fx],
             principal_point=[w / 2, h / 2],
-            width=w, height=h,
+            width=w,
+            height=h,
             image_plane_distance=1.0,
         ),
         rr.Transform3D(parent_frame="tf#/camera_optical"),

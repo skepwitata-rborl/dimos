@@ -5,6 +5,20 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Copyright 2026 Dimensional Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
 
 """End-to-end tests for scene editing features (sensor rates, toggleable
 channels, camera FOV, embodiment relay, auto-scale, UI cleanup).
@@ -16,15 +30,15 @@ Run:
 """
 
 import os
+import shutil
 import signal
 import socket
 import subprocess
 import time
-import shutil
 
 import pytest
 
-from dimos.robot.sim.scene_client import SceneClient, EMBODIMENT_PRESETS
+from dimos.robot.sim.scene_client import EMBODIMENT_PRESETS, SceneClient
 
 PORT = 8091  # Use different port to avoid conflicts with other tests
 
@@ -56,7 +70,9 @@ def _force_kill_port(port: int) -> None:
     try:
         result = subprocess.run(
             ["lsof", "-ti", f":{port}"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         for pid in result.stdout.strip().split():
             if pid:
@@ -73,9 +89,19 @@ def _start_server(*extra_args: str) -> subprocess.Popen:
     _force_kill_port(PORT)
     time.sleep(1)
     cmd = [
-        _DENO, "run", "--allow-all", "--unstable-net", _CLI_TS,
-        "dev", "--scene", "empty", "--headless", "--render", "cpu",
-        "--port", str(PORT),
+        _DENO,
+        "run",
+        "--allow-all",
+        "--unstable-net",
+        _CLI_TS,
+        "dev",
+        "--scene",
+        "empty",
+        "--headless",
+        "--render",
+        "cpu",
+        "--port",
+        str(PORT),
         *extra_args,
     ]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -94,6 +120,7 @@ def _stop_server(proc: subprocess.Popen) -> None:
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="module")
 def dimsim_server():
     """Headless DimSim with default settings."""
@@ -111,6 +138,7 @@ def scene(dimsim_server):
 
 
 # ── Tests: Sensor Rates ─────────────────────────────────────────────────────
+
 
 class TestSensorRates:
     """Configurable sensor publish rates."""
@@ -140,6 +168,7 @@ class TestSensorRates:
 
 # ── Tests: Sensor Enable/Disable ────────────────────────────────────────────
 
+
 class TestDepthToggle:
     """Toggleable depth image channel."""
 
@@ -160,6 +189,7 @@ class TestDepthToggle:
 
 
 # ── Tests: Camera FOV ───────────────────────────────────────────────────────
+
 
 class TestCameraFov:
     """Configurable camera FOV."""
@@ -194,6 +224,7 @@ class TestCameraFov:
 
 # ── Tests: Embodiment Relay ─────────────────────────────────────────────────
 
+
 class TestEmbodimentRelay:
     """Embodiment swap relay (WS message passes through EvalHarness)."""
 
@@ -205,9 +236,14 @@ class TestEmbodimentRelay:
         avatar = scene.exec("return window.__dimosAgent?.avatarUrl;")
         assert avatar is not None
         # Drone preset should have different URLs than quadruped
-        drone_preset = EMBODIMENT_PRESETS["drone"]
-        assert any("drone" in str(u).lower() or "quadrotor" in str(u).lower()
-                    for u in (avatar if isinstance(avatar, list) else [avatar])) or avatar != EMBODIMENT_PRESETS["quadruped"]["avatarUrl"]
+        EMBODIMENT_PRESETS["drone"]
+        assert (
+            any(
+                "drone" in str(u).lower() or "quadrotor" in str(u).lower()
+                for u in (avatar if isinstance(avatar, list) else [avatar])
+            )
+            or avatar != EMBODIMENT_PRESETS["quadruped"]["avatarUrl"]
+        )
 
     def test_set_embodiment_quadruped(self, scene):
         """Switch back to quadruped."""
@@ -219,11 +255,13 @@ class TestEmbodimentRelay:
     def test_embodiment_presets_exist(self, scene):
         """Core presets are defined."""
         expected = {"quadruped", "drone", "humanoid", "unitree-go2"}
-        assert expected.issubset(set(EMBODIMENT_PRESETS.keys())), \
+        assert expected.issubset(set(EMBODIMENT_PRESETS.keys())), (
             f"Missing presets: {expected - set(EMBODIMENT_PRESETS.keys())}"
+        )
 
 
 # ── Tests: Auto-Scale ───────────────────────────────────────────────────────
+
 
 class TestAutoScale:
     """Auto-scale imported models (cm → m detection)."""
@@ -293,6 +331,7 @@ class TestAutoScale:
 
 # ── Tests: UI Cleanup ───────────────────────────────────────────────────────
 
+
 class TestUiCleanup:
     """dimos mode UI: sidebar hidden, command bar hidden, keyboard hints shown.
 
@@ -336,6 +375,7 @@ class TestUiCleanup:
 
 # ── Tests: Server Physics Reinit ────────────────────────────────────────────
 
+
 class TestPhysicsReinit:
     """Server physics reconfiguration on embodiment change."""
 
@@ -368,6 +408,7 @@ class TestPhysicsReinit:
 
 # ── Tests: Empty Scene ──────────────────────────────────────────────────────
 
+
 class TestEmptyScene:
     """Empty scene has no floor/primitives."""
 
@@ -394,6 +435,7 @@ class TestEmptyScene:
 
 
 # ── Tests: CLI Flags (separate server instance) ─────────────────────────────
+
 
 class TestCliFlags:
     """Test that CLI flags are correctly passed to the browser."""

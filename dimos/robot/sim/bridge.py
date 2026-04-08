@@ -92,12 +92,18 @@ class DimSimBridgeConfig(NativeModuleConfig):
     camera_fov: int | None = None
 
     # These fields are handled via extra_args, not to_cli_args().
-    cli_exclude: frozenset[str] = frozenset({
-        "scene", "port", "local",
-        "image_rate_ms", "lidar_rate_ms", "odom_rate_ms",
-        "enable_depth",
-        "camera_fov",
-    })
+    cli_exclude: frozenset[str] = frozenset(
+        {
+            "scene",
+            "port",
+            "local",
+            "image_rate_ms",
+            "lidar_rate_ms",
+            "odom_rate_ms",
+            "enable_depth",
+            "camera_fov",
+        }
+    )
 
     # Populated by _resolve_paths() — deno run args + dev subcommand + scene/port.
     extra_args: list[str] = Field(default_factory=list)
