@@ -15,8 +15,8 @@
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol
 
+from dimos.core.coordination.python_worker import MethodCallProxy
 from dimos.core.stream import RemoteStream
-from dimos.core.worker import MethodCallProxy
 from dimos.protocol.rpc.pubsubrpc import LCMRPC
 from dimos.protocol.rpc.spec import DEFAULT_RPC_TIMEOUT, DEFAULT_RPC_TIMEOUTS, RPCSpec
 from dimos.utils.logging_config import setup_logger
@@ -91,9 +91,6 @@ class ModuleProxyProtocol(Protocol):
     def start(self) -> None: ...
     def stop(self) -> None: ...
     def set_transport(self, stream_name: str, transport: Any) -> bool: ...
-    def get_rpc_method_names(self) -> list[str]: ...
-    def set_rpc_method(self, method: str, callable: RpcCall) -> None: ...
-    def get_rpc_calls(self, *methods: str) -> RpcCall | tuple[RpcCall, ...]: ...
 
 
 class RPCClient:
