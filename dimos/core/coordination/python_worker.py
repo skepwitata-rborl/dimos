@@ -22,12 +22,16 @@ import threading
 import traceback
 from typing import TYPE_CHECKING, Any
 
+import rpyc
+from rpyc.utils.server import ThreadedServer
+
 from dimos.core.coordination.worker_messages import (
     CallMethodRequest,
     DeployModuleRequest,
     GetAttrRequest,
     SetRefRequest,
     ShutdownRequest,
+    StartRpycRequest,
     SuppressConsoleRequest,
     UndeployModuleRequest,
     WorkerRequest,
@@ -127,6 +131,11 @@ class Actor:
         """Set the actor reference on the remote module."""
         result = self._send_request_to_worker(SetRefRequest(module_id=self._module_id, ref=ref))
         return ActorFuture(result)
+
+    def start_rpyc(self) -> int:
+        """Start an RPyC server in the worker process and return its port."""
+        port: int = self._send_request_to_worker(StartRpycRequest())
+        return port
 
     def __getattr__(self, name: str) -> Any:
         """Proxy attribute access to the worker process."""
@@ -300,6 +309,36 @@ class PythonWorker:
             self._process = None
 
 
+class _WorkerRpycService(rpyc.Service):  # type: ignore[misc]
+    _instances: dict[int, Any] = {}
+
+    def on_connect(self, conn: Any) -> None:
+        conn._config.update(
+            {
+                "allow_all_attrs": True,
+                "allow_public_attrs": True,
+                "allow_setattr": True,
+            }
+        )
+
+    def exposed_get_module(self, module_id: int) -> Any:
+        return self._instances[module_id]
+
+
+def _start_rpyc_server(instances: dict[int, Any]) -> ThreadedServer:
+    _WorkerRpycService._instances = instances
+    server = ThreadedServer(
+        _WorkerRpycService,
+        port=0,
+        protocol_config={
+            "allow_all_attrs": True,
+            "allow_public_attrs": True,
+        },
+    )
+    threading.Thread(target=server.start, daemon=True).start()
+    return server
+
+
 def _suppress_console_output() -> None:
     """Redirect stdout/stderr to /dev/null and strip console handlers."""
     devnull = open(os.devnull, "w")
@@ -353,7 +392,58 @@ def _worker_entrypoint(conn: Connection, worker_id: int) -> None:
                 logger.error("Error during worker shutdown", exc_info=True)
 
 
+def _handle_request(
+    request: Any,
+    instances: dict[int, Any],
+    worker_id: int,
+    rpyc_server: ThreadedServer | None,
+) -> tuple[WorkerResponse, ThreadedServer | None, bool]:
+    match request:
+        case DeployModuleRequest(module_id=module_id, module_class=module_class, kwargs=kwargs):
+            instances[module_id] = module_class(**kwargs)
+            return WorkerResponse(result=module_id), rpyc_server, False
+
+        case SetRefRequest(module_id=module_id, ref=ref):
+            instances[module_id].ref = ref
+            return WorkerResponse(result=worker_id), rpyc_server, False
+
+        case GetAttrRequest(module_id=module_id, name=name):
+            return WorkerResponse(result=getattr(instances[module_id], name)), rpyc_server, False
+
+        case CallMethodRequest(module_id=module_id, name=name, args=args, kwargs=kwargs):
+            method = getattr(instances[module_id], name)
+            return WorkerResponse(result=method(*args, **kwargs)), rpyc_server, False
+
+        case UndeployModuleRequest(module_id=module_id):
+            instance = instances.pop(module_id, None)
+            if instance is not None:
+                instance.stop()
+            return WorkerResponse(result=True), rpyc_server, False
+
+        case SuppressConsoleRequest():
+            _suppress_console_output()
+            return WorkerResponse(result=True), rpyc_server, False
+
+        case StartRpycRequest():
+            server = rpyc_server or _start_rpyc_server(instances)
+            return WorkerResponse(result=server.port), server, False
+
+        case ShutdownRequest():
+            if rpyc_server is not None:
+                rpyc_server.close()
+            return WorkerResponse(result=True), rpyc_server, True
+
+        case _:
+            return (
+                WorkerResponse(error=f"Unknown request type: {type(request)}"),
+                rpyc_server,
+                False,
+            )
+
+
 def _worker_loop(conn: Connection, instances: dict[int, Any], worker_id: int) -> None:
+    rpyc_server: ThreadedServer | None = None
+
     while True:
         try:
             if not conn.poll(timeout=0.1):
@@ -362,44 +452,12 @@ def _worker_loop(conn: Connection, instances: dict[int, Any], worker_id: int) ->
         except (EOFError, KeyboardInterrupt):
             break
 
-        response: WorkerResponse
+        should_stop = False
+
         try:
-            match request:
-                case DeployModuleRequest(
-                    module_id=module_id, module_class=module_class, kwargs=kwargs
-                ):
-                    instance = module_class(**kwargs)
-                    instances[module_id] = instance
-                    response = WorkerResponse(result=module_id)
-
-                case SetRefRequest(module_id=module_id, ref=ref):
-                    instances[module_id].ref = ref
-                    response = WorkerResponse(result=worker_id)
-
-                case GetAttrRequest(module_id=module_id, name=name):
-                    response = WorkerResponse(result=getattr(instances[module_id], name))
-
-                case CallMethodRequest(module_id=module_id, name=name, args=args, kwargs=kwargs):
-                    method = getattr(instances[module_id], name)
-                    response = WorkerResponse(result=method(*args, **kwargs))
-
-                case UndeployModuleRequest(module_id=module_id):
-                    instance = instances.pop(module_id, None)
-                    if instance is not None:
-                        instance.stop()
-                    response = WorkerResponse(result=True)
-
-                case SuppressConsoleRequest():
-                    _suppress_console_output()
-                    response = WorkerResponse(result=True)
-
-                case ShutdownRequest():
-                    conn.send(WorkerResponse(result=True))
-                    break
-
-                case _:
-                    response = WorkerResponse(error=f"Unknown request type: {type(request)}")
-
+            response, rpyc_server, should_stop = _handle_request(
+                request, instances, worker_id, rpyc_server
+            )
         except Exception as e:
             response = WorkerResponse(
                 error=f"{e.__class__.__name__}: {e}\n{traceback.format_exc()}"
@@ -408,4 +466,7 @@ def _worker_loop(conn: Connection, instances: dict[int, Any], worker_id: int) ->
         try:
             conn.send(response)
         except (BrokenPipeError, EOFError):
+            break
+
+        if should_stop:
             break
