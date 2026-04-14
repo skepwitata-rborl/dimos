@@ -247,8 +247,12 @@ class GO2Connection(Module, Camera, Pointcloud):
             return
         self.connection.start()
 
+        import os as _os
+        _skip_publish = _os.environ.get("DIMOS_SKIP_SENSOR_PUBLISH") == "1"
+
         def onimage(image: Image) -> None:
-            self.color_image.publish(image)
+            if not _skip_publish:
+                self.color_image.publish(image)
             self._latest_video_frame = image
 
         lidar_stream = self.connection.lidar_stream()
@@ -295,7 +299,8 @@ class GO2Connection(Module, Camera, Pointcloud):
                 ops.do_action(on_completed=lambda: _on_stream_complete("video"))
             )
 
-        self.register_disposable(lidar_stream.subscribe(self.lidar.publish))
+        _lidar_sub = (lambda _m: None) if _skip_publish else self.lidar.publish
+        self.register_disposable(lidar_stream.subscribe(_lidar_sub))
         self.register_disposable(odom_stream.subscribe(self._publish_tf))
         self.register_disposable(video_stream.subscribe(onimage))
         self.register_disposable(Disposable(self.cmd_vel.subscribe(self.move)))

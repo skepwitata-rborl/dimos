@@ -158,6 +158,16 @@ REPLAY_PREFETCH_SIZE = 5  # number of items to prefetch ahead
 ENABLE_SKIP_TF = True
 
 
+# ------------------------------------------------------------------
+# KNOB 12: Skip sensor stream LCM publishing
+# ------------------------------------------------------------------
+# GO2Connection publishes lidar/color_image via LCM. During --viewer=none
+# bench, nobody subscribes. Encoding + broadcast is pure overhead.
+# Keeps stream subscription (so exit-on-eof works) but no-ops the publish.
+# Controlled via env var DIMOS_SKIP_SENSOR_PUBLISH=1.
+ENABLE_SKIP_SENSOR_PUBLISH = True
+
+
 def _build_startup_code() -> str:
     """Assemble the monkey-patch string injected via sitecustomize.py."""
     lines: list[str] = []
@@ -211,6 +221,9 @@ def apply() -> dict:
 
     if ENABLE_SKIP_TF:
         env["DIMOS_SKIP_TF"] = "1"
+
+    if ENABLE_SKIP_SENSOR_PUBLISH:
+        env["DIMOS_SKIP_SENSOR_PUBLISH"] = "1"
 
     startup_code = _build_startup_code()
     if startup_code:
