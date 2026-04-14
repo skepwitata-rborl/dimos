@@ -186,7 +186,7 @@ ENABLE_DISABLE_GC = True
 # wall time = less idle polling overhead. Fixed work still processed fully.
 # Controlled via env var DIMOS_REPLAY_SPEED=<float>.
 ENABLE_REPLAY_SPEED = True
-REPLAY_SPEED = 100.0
+REPLAY_SPEED = 1000.0
 
 
 # ------------------------------------------------------------------
