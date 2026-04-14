@@ -117,7 +117,7 @@ LOG_LEVEL = "INFO"  # "DEBUG" | "INFO" | "WARNING" | "ERROR"
 # and its own asyncio event loop — all serving zero clients during benchmark.
 # When enabled, the blueprint skips this module entirely.
 # Controlled via env var DIMOS_SKIP_WEBSOCKET_VIS=1 → checked in blueprint.
-ENABLE_SKIP_WEBSOCKET_VIS = False
+ENABLE_SKIP_WEBSOCKET_VIS = True
 
 
 # ------------------------------------------------------------------
