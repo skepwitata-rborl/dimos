@@ -35,6 +35,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import errno
 import fcntl
+import functools
 import glob
 import inspect
 import json
@@ -63,6 +64,86 @@ _DSP_PROTOCOL_PATH = _COMMON_DIR / "dsp_protocol.h"
 # Lock file coordinating concurrent `nix build .#arduino_bridge` across
 # ArduinoModule instances in the same blueprint.
 _BRIDGE_BUILD_LOCK_PATH = _ARDUINO_HW_DIR / ".bridge_build.lock"
+
+
+@functools.lru_cache(maxsize=1)
+def _arduino_tools_bin_dir() -> Path:
+    """Resolve the ``bin/`` directory of the ``dimos_arduino_tools`` flake output.
+
+    The flake packages ``arduino-cli`` (unwrapped Go binary), ``avrdude``,
+    and ``qemu-system-avr`` into a single ``symlinkJoin``.  We materialize
+    it via ``nix build --print-out-paths --no-link`` — no ``result``
+    symlink in the tree, just an absolute ``/nix/store/...`` path we can
+    cache for the process lifetime.
+
+    Why not rely on ``$PATH``: ArduinoModule is imported and run from
+    plain Python scripts, ``uv run``, ``dimos run``, ``pytest``, etc. —
+    none of which inherit the flake's ``devShells.default`` environment.
+    Hard-coding the bare names ``arduino-cli`` / ``avrdude`` /
+    ``qemu-system-avr`` only works if the user has already entered
+    ``nix develop``, which defeats the point of making the module a
+    normal Python dependency.  Resolving tools through ``nix build`` means
+    the caller's shell environment is irrelevant: as long as ``nix`` is on
+    ``PATH``, everything ArduinoModule needs resolves to a content-
+    addressed store path that it calls by absolute path.
+
+    The build is a no-op after the first cold run — the symlinkJoin
+    output is content-addressed and all three inputs are in nixpkgs'
+    public binary cache.  ``functools.lru_cache(maxsize=1)`` keeps the
+    resolved path in memory so subsequent calls within the same Python
+    process don't re-invoke nix at all.
+    """
+    logger.info("Resolving dimos_arduino_tools via nix build")
+    try:
+        result = subprocess.run(
+            [
+                "nix",
+                "build",
+                ".#dimos_arduino_tools",
+                "--print-out-paths",
+                "--no-link",
+            ],
+            cwd=str(_ARDUINO_HW_DIR),
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "`nix` not found on PATH. ArduinoModule resolves its Arduino "
+            "toolchain (arduino-cli, avrdude, qemu-system-avr) through the "
+            f"flake at {_ARDUINO_HW_DIR}, so the `nix` CLI must be "
+            "installed and on PATH. Install Nix (https://nixos.org/download) "
+            "and re-run."
+        ) from exc
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Failed to materialize `dimos_arduino_tools` via "
+            "`nix build .#dimos_arduino_tools`:\n"
+            f"{result.stderr}\n{result.stdout}"
+        )
+    # `--print-out-paths` prints one store path per output on stdout;
+    # we have a single output, so the last non-empty line is it.
+    out_paths = [line for line in result.stdout.splitlines() if line.strip()]
+    if not out_paths:
+        raise RuntimeError(
+            "`nix build .#dimos_arduino_tools --print-out-paths` returned "
+            "no paths on stdout. This should never happen; please file a "
+            "bug against the arduino flake."
+        )
+    return Path(out_paths[-1]) / "bin"
+
+
+def _arduino_cli_bin() -> str:
+    return str(_arduino_tools_bin_dir() / "arduino-cli")
+
+
+def _avrdude_bin() -> str:
+    return str(_arduino_tools_bin_dir() / "avrdude")
+
+
+def _qemu_system_avr_bin() -> str:
+    return str(_arduino_tools_bin_dir() / "qemu-system-avr")
 
 
 @dataclass
@@ -532,18 +613,12 @@ class ArduinoModule(NativeModule):
         printers, USB-serial adapters, etc.) so the unmatched-fallback
         path now raises with a clear message instead of guessing.
         """
-        try:
-            result = subprocess.run(
-                ["arduino-cli", "board", "list", "--format", "json"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-        except FileNotFoundError:
-            raise RuntimeError(
-                "arduino-cli not found. Install it or enter the nix dev shell: "
-                "cd dimos/hardware/arduino && nix develop"
-            ) from None
+        result = subprocess.run(
+            [_arduino_cli_bin(), "board", "list", "--format", "json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
 
         if result.returncode != 0:
             raise RuntimeError(f"arduino-cli board list failed: {result.stderr}")
@@ -697,35 +772,47 @@ class ArduinoModule(NativeModule):
         # Close header guard
         sections.append("#endif /* DIMOS_ARDUINO_H */")
 
-        # Write into the per-sketch build directory rather than the
-        # sketch's source directory.  Keeps the user's repo clean (no
-        # untracked generated file next to the .ino) and the compile
-        # command already adds ``-I{build_dir}`` so ``#include
-        # "dimos_arduino.h"`` still resolves.
+        # Write the generated header directly next to the .ino.  The
+        # arduino-cli sketch preprocessor only honors ``-I`` flags from
+        # ``compiler.cpp.extra_flags`` during the main compile pass,
+        # **not** during its initial sketch-preprocessing phase (the
+        # ctags-driven step that scans the .ino to parse top-level
+        # declarations).  If the header lives outside the sketch dir,
+        # that phase parses the .ino with ``dimos_arduino.h`` unresolved,
+        # the ``enum dimos_topic`` tag never becomes visible, and
+        # ``case DIMOS_TOPIC__FOO:`` fails with "not declared in this
+        # scope" — even though the main compile pass would have found
+        # it.  Placing the header in the sketch dir puts it on arduino-
+        # cli's built-in search path and sidesteps the whole mess.
+        #
+        # Repo-cleanliness trade-off: the header is listed in
+        # ``dimos/hardware/arduino/.gitignore`` under
+        # ``examples/*/sketch/dimos_arduino.h`` so it stays untracked.
+        # Subclass authors shipping their own sketch directory outside
+        # ``examples/`` need to add an equivalent ignore entry.
         #
         # Note: two ArduinoModule subclasses that share a ``sketch_path``
-        # share this build dir (and therefore the generated header).
-        # That's intentional — a single compiled sketch can only have
-        # one header baked in — but it means subclasses sharing a sketch
-        # must also agree on the set of streams and config fields they
-        # embed.  If you need divergent headers, give each module its
-        # own ``sketch_path``.
+        # share this header.  That's intentional — a single compiled
+        # sketch can only have one header baked in — but it means
+        # subclasses sharing a sketch must also agree on the set of
+        # streams and config fields they embed.  If you need divergent
+        # headers, give each module its own ``sketch_path``.
         #
-        # We wipe the build dir first.  arduino-cli writes
+        # We also wipe the build dir.  arduino-cli writes
         # ``includes.cache`` and ``build.options.json`` under
         # ``--build-path`` and uses them to skip preprocessing on the
-        # next incremental compile — if the header's content or location
-        # changes between runs (very common: the header is auto-
-        # generated from config on every build), a stale cache can lead
-        # to ``dimos_arduino.h: No such file or directory`` errors even
-        # though the file is on disk.  Clearing the directory forces a
-        # clean compile.
+        # next incremental compile — if the header's content changes
+        # between runs (very common: it's regenerated from config on
+        # every build), a stale cache can lead to mysterious "not
+        # declared in this scope" errors even though the file on disk
+        # is correct.  Clearing the build dir forces a clean compile.
+        sketch_dir = self._resolve_sketch_dir()
+        header_path = sketch_dir / "dimos_arduino.h"
+        header_path.write_text("\n".join(sections))
         build_dir = self._build_dir()
         if build_dir.exists():
             shutil.rmtree(build_dir)
         build_dir.mkdir(parents=True, exist_ok=True)
-        header_path = build_dir / "dimos_arduino.h"
-        header_path.write_text("\n".join(sections))
         logger.info("Generated Arduino header", path=str(header_path))
 
     def _resolve_sketch_dir(self) -> Path:
@@ -761,26 +848,22 @@ class ArduinoModule(NativeModule):
             )
         core_id = f"{parts[0]}:{parts[1]}"
 
+        arduino_cli = _arduino_cli_bin()
+
         # Cheap check first: `arduino-cli core list` prints installed cores.
         # If our core is already there, skip the install step entirely.
-        try:
-            list_result = subprocess.run(
-                ["arduino-cli", "core", "list"],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-        except FileNotFoundError:
-            raise RuntimeError(
-                "arduino-cli not found. Install it or enter the nix dev shell: "
-                "cd dimos/hardware/arduino && nix develop"
-            ) from None
+        list_result = subprocess.run(
+            [arduino_cli, "core", "list"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
         if list_result.returncode == 0 and core_id in list_result.stdout:
             return
 
         logger.info("Installing arduino core", core=core_id)
         install_result = subprocess.run(
-            ["arduino-cli", "core", "install", core_id],
+            [arduino_cli, "core", "install", core_id],
             capture_output=True,
             text=True,
             timeout=600,
@@ -800,14 +883,16 @@ class ArduinoModule(NativeModule):
 
         common = str(_COMMON_DIR)
         msgs = str(_COMMON_DIR / "arduino_msgs")
-        # `-I{build_dir}` makes the generated `dimos_arduino.h` visible
-        # to `#include "dimos_arduino.h"` in the sketch — we put it
-        # there rather than in the sketch source directory so the
-        # user's repo stays clean.
-        extra_flags = f"-I{build_dir} -I{common} -I{msgs} -DF_CPU=16000000UL"
+        # ``dimos_arduino.h`` lives in the sketch dir (see
+        # ``_generate_header`` for why); the sketch dir is on arduino-cli's
+        # default include path, so no ``-I`` is needed for it.  The
+        # remaining ``-I`` flags point at the shared ``common/`` headers
+        # (dsp_protocol, lcm_coretypes_arduino) and the generated
+        # per-message Arduino type headers under ``arduino_msgs/``.
+        extra_flags = f"-I{common} -I{msgs} -DF_CPU=16000000UL"
 
         cmd = [
-            "arduino-cli",
+            _arduino_cli_bin(),
             "compile",
             "--fqbn",
             self.config.board_fqbn,
@@ -863,7 +948,7 @@ class ArduinoModule(NativeModule):
         tmp_log.close()
 
         cmd = [
-            "qemu-system-avr",
+            _qemu_system_avr_bin(),
             "-machine",
             machine,
             "-bios",
@@ -935,7 +1020,7 @@ class ArduinoModule(NativeModule):
             raise RuntimeError("No port configured for flashing")
 
         cmd = [
-            "arduino-cli",
+            _arduino_cli_bin(),
             "upload",
             "-p",
             port,

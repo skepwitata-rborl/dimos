@@ -24,10 +24,11 @@ This is the only test that actually exercises QEMU + the bridge binary +
 a compiled AVR sketch as one unit, so it's the primary regression guard
 for the ``virtual=True`` runtime feature.
 
-Requirements (all three must be on PATH or the test skips):
-    - ``nix``             — builds ``arduino_bridge`` via the flake
-    - ``arduino-cli``     — compiles the sketch to an ELF
-    - ``qemu-system-avr`` — runs the ELF
+Requirements:
+    - ``nix`` must be on PATH.  ``ArduinoModule`` resolves ``arduino-cli``,
+      ``avrdude``, and ``qemu-system-avr`` through the ``dimos_arduino_tools``
+      flake output, so only ``nix`` itself needs to be installed — the
+      Arduino toolchain is materialized on demand via ``nix build``.
 
 Run with::
 
@@ -46,11 +47,13 @@ import pytest
 # Arduino toolchain can still collect this file cheaply.
 pytestmark = [pytest.mark.slow, pytest.mark.tool]
 
-_REQUIRED_BINARIES = ("nix", "arduino-cli", "qemu-system-avr")
-
 
 def _missing_binaries() -> list[str]:
-    return [b for b in _REQUIRED_BINARIES if shutil.which(b) is None]
+    # Only `nix` is required on PATH; the rest of the toolchain
+    # (arduino-cli, avrdude, qemu-system-avr) is resolved through the
+    # arduino flake's `dimos_arduino_tools` package inside
+    # ``ArduinoModule`` — no user-facing `nix develop` required.
+    return ["nix"] if shutil.which("nix") is None else []
 
 
 # Budget for the full pipeline: first-run `nix build` can be minutes on a
@@ -82,12 +85,12 @@ def test_virtual_arduino_round_trip() -> None:
         and published it on ``twist_echo``
     11. ``TestPublisher.echo_in`` received and counted it
     """
-    missing = _missing_binaries()
-    if missing:
+    if _missing_binaries():
         pytest.skip(
-            f"Virtual Arduino e2e test requires {', '.join(_REQUIRED_BINARIES)} on "
-            f"PATH (missing: {', '.join(missing)}). Enter the arduino flake dev "
-            f"shell: `cd dimos/hardware/arduino && nix develop`."
+            "Virtual Arduino e2e test requires `nix` on PATH — the rest of "
+            "the Arduino toolchain (arduino-cli, avrdude, qemu-system-avr) "
+            "is fetched via `nix build .#dimos_arduino_tools` inside "
+            "ArduinoModule.  Install Nix and re-run."
         )
 
     # Deferred imports — pulling in ModuleCoordinator spins up a lot of

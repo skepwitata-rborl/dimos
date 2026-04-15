@@ -31,16 +31,46 @@ from unittest import mock
 
 import pytest
 
+# Captured at import time — the autouse fixture below patches the module
+# attribute for every test, so tests that want to exercise the *real*
+# resolver (e.g. its FileNotFoundError handling) reach it through this
+# unpatched reference.
 from dimos.core.arduino_module import (
     _ARDUINO_HW_DIR,
     _KNOWN_TYPE_HEADERS,
     ArduinoModule,
     ArduinoModuleConfig,
+    _arduino_tools_bin_dir as _real_arduino_tools_bin_dir,
 )
 from dimos.core.stream import In, Out
 from dimos.msgs.geometry_msgs.Twist import Twist
 
 # Fixtures / helpers
+
+
+@pytest.fixture(autouse=True)
+def _fake_arduino_tools_bin_dir(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Any:
+    """Short-circuit ``_arduino_tools_bin_dir`` for every test in this file.
+
+    Without this, every helper that shells out to ``arduino-cli`` /
+    ``qemu-system-avr`` (``_detect_port``, ``_ensure_core_installed``,
+    ``_compile_sketch``, ``_start_qemu``, ``_flash``) would first invoke
+    the resolver, which runs ``nix build .#dimos_arduino_tools``.  The
+    unit tests are *unit* tests — they have no business touching the
+    Nix store — so we replace the resolver with a fixed fake ``bin/``
+    directory.  Tests that mock ``subprocess.run`` will then see calls
+    routed through absolute paths under this fake dir, which is fine
+    because the mocks don't care what the argv's first element is.
+    """
+    fake_bin = tmp_path_factory.mktemp("fake_arduino_tools") / "bin"
+    fake_bin.mkdir()
+    with mock.patch(
+        "dimos.core.arduino_module._arduino_tools_bin_dir",
+        return_value=fake_bin,
+    ):
+        yield fake_bin
 
 
 class _ExampleConfig(ArduinoModuleConfig):
@@ -96,11 +126,26 @@ def test_build_topic_enum_assigns_1_based_alphabetical() -> None:
 # _generate_header — config embedding & escaping
 
 
+def _patch_sketch_and_build_dirs(mod: _ExampleModule, tmp_path: Path) -> Any:
+    """Redirect ``_resolve_sketch_dir`` and ``_build_dir`` into ``tmp_path``.
+
+    ``_generate_header`` writes the header into the sketch dir (so
+    arduino-cli's sketch preprocessor can find it) and also wipes +
+    recreates the build dir.  Tests need both paths diverted away from
+    the real repo.
+    """
+    sketch_dir = tmp_path
+    build_dir = tmp_path / "build"
+    sketch_patch = mock.patch.object(mod, "_resolve_sketch_dir", return_value=sketch_dir)
+    build_patch = mock.patch.object(mod, "_build_dir", return_value=build_dir)
+    return sketch_patch, build_patch
+
+
 def test_generate_header_escapes_quoted_strings(tmp_path: Path) -> None:
     """A config string containing " or \\ must not produce invalid C."""
     mod = _make_module()
-    # Patch _resolve_sketch_dir so the generated header lands in tmp.
-    with mock.patch.object(mod, "_build_dir", return_value=tmp_path):
+    sketch_patch, build_patch = _patch_sketch_and_build_dirs(mod, tmp_path)
+    with sketch_patch, build_patch:
         mod._generate_header()
     text = (tmp_path / "dimos_arduino.h").read_text()
 
@@ -116,7 +161,8 @@ def test_generate_header_includes_topic_enum_and_message_header(
     tmp_path: Path,
 ) -> None:
     mod = _make_module()
-    with mock.patch.object(mod, "_build_dir", return_value=tmp_path):
+    sketch_patch, build_patch = _patch_sketch_and_build_dirs(mod, tmp_path)
+    with sketch_patch, build_patch:
         mod._generate_header()
     text = (tmp_path / "dimos_arduino.h").read_text()
 
@@ -136,7 +182,8 @@ def test_generate_header_rejects_non_finite_float(tmp_path: Path) -> None:
 
     mod = _make_module()
     mod.config = _NaNConfig()
-    with mock.patch.object(mod, "_build_dir", return_value=tmp_path):
+    sketch_patch, build_patch = _patch_sketch_and_build_dirs(mod, tmp_path)
+    with sketch_patch, build_patch:
         with pytest.raises(ValueError, match="non-finite"):
             mod._generate_header()
 
@@ -147,7 +194,8 @@ def test_generate_header_rejects_unembeddable_type(tmp_path: Path) -> None:
 
     mod = _make_module()
     mod.config = _ListConfig()
-    with mock.patch.object(mod, "_build_dir", return_value=tmp_path):
+    sketch_patch, build_patch = _patch_sketch_and_build_dirs(mod, tmp_path)
+    with sketch_patch, build_patch:
         with pytest.raises(TypeError, match="Cannot embed config field 'the_list'"):
             mod._generate_header()
 
@@ -203,14 +251,25 @@ def test_detect_port_wraps_invalid_json() -> None:
             mod._detect_port()
 
 
-def test_detect_port_wraps_missing_arduino_cli() -> None:
-    mod = _make_module()
+def test_arduino_tools_bin_dir_raises_on_missing_nix() -> None:
+    """The resolver surfaces a clean RuntimeError (not a bare
+    FileNotFoundError) when ``nix`` itself is missing from PATH.  That is
+    the only failure mode of the toolchain resolver now that
+    ``arduino-cli`` / ``avrdude`` / ``qemu-system-avr`` are packaged as
+    a flake output and come from a ``nix build`` rather than from
+    ``$PATH``.
+    """
+    # Clear the ``lru_cache`` so we actually re-enter the function body.
+    _real_arduino_tools_bin_dir.cache_clear()
     with mock.patch(
         "dimos.core.arduino_module.subprocess.run",
         side_effect=FileNotFoundError,
     ):
-        with pytest.raises(RuntimeError, match="arduino-cli not found"):
-            mod._detect_port()
+        with pytest.raises(RuntimeError, match="nix"):
+            _real_arduino_tools_bin_dir()
+    # Leave the cache cleared so the next test (which may have its own
+    # fake_arduino_tools_bin_dir fixture) starts from a known state.
+    _real_arduino_tools_bin_dir.cache_clear()
 
 
 def test_detect_port_wraps_non_zero_exit() -> None:
