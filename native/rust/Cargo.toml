@@ -6,10 +6,10 @@ description = "Rust native module SDK for dimos NativeModule framework"
 license = "Apache-2.0"
 
 [dependencies]
-dimos-lcm = { path = "/home/andrew/code/dimos-lcm/tools/rust/lcm" }
+dimos-lcm = { git = "https://github.com/dimensionalOS/dimos-lcm.git", branch = "rust-codegen" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [dev-dependencies]
-lcm-msgs = { path = "/home/andrew/code/dimos-lcm/generated/rust_lcm_msgs" }
+lcm-msgs = { git = "https://github.com/dimensionalOS/dimos-lcm.git", branch = "rust-codegen" }
