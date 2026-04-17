@@ -52,7 +52,6 @@ class LocalPlannerConfig(NativeModuleConfig):
     cwd: str | None = str(Path(__file__).resolve().parent)
     executable: str = "result/bin/local_planner"
     # build_command: str | None = "nix build --no-write-lock-file"
-    # rebuild_on_change: list[str] = ["main.cpp"]  # type: ignore[assignment]
     build_command: str | None = (
         "nix build github:dimensionalOS/dimos-module-local-planner/v0.3.1 --no-write-lock-file"
     )

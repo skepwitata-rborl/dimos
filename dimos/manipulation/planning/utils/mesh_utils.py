@@ -31,13 +31,13 @@ Example:
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 import re
 import shutil
 import tempfile
 from typing import TYPE_CHECKING
 
-from dimos.utils.change_detect import hash_dict, hash_paths
 from dimos.utils.logging_config import setup_logger
 
 if TYPE_CHECKING:
@@ -72,22 +72,13 @@ def prepare_urdf_for_drake(
     Returns:
         Path to the prepared URDF file (may be cached)
     """
-    urdf_path = Path(urdf_path).resolve()
+    urdf_path = Path(urdf_path)
     package_paths = package_paths or {}
     xacro_args = xacro_args or {}
 
-    config_hash = hash_dict(
-        {
-            "urdf_path": urdf_path,
-            "package_paths": package_paths,
-            "xacro_args": xacro_args,
-            "convert_meshes": convert_meshes,
-        }
-    )
-    _urdf_hash = hash_paths([str(urdf_path)])
-    if _urdf_hash is None:
-        raise FileNotFoundError(f"URDF file not found or unreadable: {urdf_path}")
-    cache_path = _CACHE_DIR / f"v3_{_urdf_hash}_{config_hash}" / urdf_path.stem
+    # Generate cache key
+    cache_key = _generate_cache_key(urdf_path, package_paths, xacro_args, convert_meshes)
+    cache_path = _CACHE_DIR / cache_key / urdf_path.stem
     cache_path.mkdir(parents=True, exist_ok=True)
     cached_urdf = cache_path / f"{urdf_path.stem}.urdf"
 
@@ -117,6 +108,27 @@ def prepare_urdf_for_drake(
     logger.info(f"Prepared URDF cached at: {cached_urdf}")
 
     return str(cached_urdf)
+
+
+def _generate_cache_key(
+    urdf_path: Path,
+    package_paths: dict[str, Path],
+    xacro_args: dict[str, str],
+    convert_meshes: bool,
+) -> str:
+    """Generate a cache key for the URDF configuration.
+
+    Includes a version number to invalidate cache when processing logic changes.
+    """
+    # Include file modification time
+    mtime = urdf_path.stat().st_mtime if urdf_path.exists() else 0
+
+    # Version number to invalidate cache when processing logic changes
+    # Increment this when adding new processing steps (e.g., stripping transmission blocks)
+    processing_version = "v2"
+
+    key_data = f"{processing_version}:{urdf_path}:{mtime}:{sorted(package_paths.items())}:{sorted(xacro_args.items())}:{convert_meshes}"
+    return hashlib.md5(key_data.encode()).hexdigest()[:16]
 
 
 def _process_xacro(

@@ -56,7 +56,6 @@ from dimos.msgs.geometry_msgs.Pose import Pose
 from dimos.msgs.nav_msgs.Odometry import Odometry
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.spec import mapping, perception
-from dimos.utils.change_detect import Glob, PathEntry
 from dimos.utils.logging_config import setup_logger
 
 _CONFIG_DIR = Path(__file__).parent / "config"
@@ -114,15 +113,6 @@ class FastLio2Config(NativeModuleConfig):
     cwd: str | None = str(Path(__file__).parent / "cpp")
     executable: str = "result/bin/fastlio2_native"
     build_command: str | None = "nix build .#fastlio2_native"
-    rebuild_on_change: list[PathEntry] | None = [
-        Glob("*.cpp"),
-        Glob("*.hpp"),
-        "CMakeLists.txt",
-        "flake.nix",
-        "flake.lock",
-        "config",
-    ]
-
     # Livox SDK hardware config
     host_ip: str = "192.168.1.5"
     lidar_ip: str = "192.168.1.155"
@@ -180,7 +170,7 @@ class FastLio2Config(NativeModuleConfig):
 
     # init_pose is computed from mount; config is resolved to config_path
     init_pose: list[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
-    cli_exclude: frozenset[str] = frozenset({"config", "mount", "rebuild_on_change"})
+    cli_exclude: frozenset[str] = frozenset({"config", "mount"})
 
     def model_post_init(self, __context: object) -> None:
         """Resolve config_path and compute init_pose from mount."""

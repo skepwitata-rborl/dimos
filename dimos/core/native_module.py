@@ -57,7 +57,6 @@ from pydantic import Field
 from dimos.constants import DEFAULT_THREAD_JOIN_TIMEOUT
 from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
-from dimos.utils.change_detect import PathEntry, did_change, update_cache
 from dimos.utils.logging_config import setup_logger
 
 # ctypes is only needed for the Linux child-preexec helper below.  Hoisting
@@ -429,49 +428,6 @@ class NativeModule(Module):
             if topic is not None:
                 topics[name] = str(topic)
         return topics
-
-
-def _clear_nix_executable(exe: Path, cwd: Path | None) -> None:
-    """Remove the old exe (or its nix ``result``-style symlink ancestor).
-
-    Walks from *exe* upward, bounded by *cwd*, looking for the innermost
-    symlinked ancestor.  If one is found, it's unlinked.  Otherwise, if the
-    exe itself exists as a regular file, it's unlinked.
-
-    *cwd* is required and acts as a safety boundary: the walk only considers
-    ancestors strictly under *cwd*, so we can never accidentally unlink
-    something like ``/usr/local`` if the exe happens to be ``/usr/local/bin/foo``
-    and ``/usr/local`` is a symlink (common on macOS with Homebrew).
-    """
-    if cwd is None:
-        # No cwd → no safe upper bound for the walk, so refuse to climb.
-        # Just unlink the exe itself if it exists.
-        if exe.is_symlink() or exe.exists():
-            exe.unlink(missing_ok=True)
-        return
-
-    cwd_resolved = cwd.resolve()
-    found_symlink: Path | None = None
-    candidate: Path = exe
-    while True:
-        # Stop at cwd — we never unlink the cwd itself, even if it's a symlink.
-        if candidate == cwd or candidate.resolve() == cwd_resolved:
-            break
-        if candidate.is_symlink():
-            found_symlink = candidate
-            break
-        parent = candidate.parent
-        if parent == candidate:
-            # Reached filesystem root without ever passing through cwd —
-            # exe is outside cwd's tree; refuse to walk.
-            found_symlink = None
-            break
-        candidate = parent
-
-    if found_symlink is not None:
-        found_symlink.unlink(missing_ok=True)
-    elif exe.is_symlink() or exe.exists():
-        exe.unlink(missing_ok=True)
 
 
 __all__ = [
