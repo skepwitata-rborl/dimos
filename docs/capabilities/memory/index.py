@@ -24,7 +24,7 @@ from dimos.mapping.pointclouds.occupancy import (
 )
 from dimos.memory2.store.sqlite import SqliteStore
 from dimos.memory2.transform import normalize, smooth, speed
-from dimos.memory2.vis.color import color
+from dimos.memory2.vis.color import Color
 from dimos.memory2.vis.plot.plot import Plot
 from dimos.memory2.vis.space.elements import Point
 from dimos.memory2.vis.space.space import Space
@@ -67,7 +67,7 @@ store.streams.color_image.map(lambda obs: obs.derive(data=obs.data.brightness)).
     normalize()
 ).tap(
     lambda obs: drawing_brightness.add(
-        Point(obs.pose_stamped, color=color(obs.data, cmap="turbo"), radius=0.025)
+        Point(obs.pose_stamped, color=Color.from_cmap("turbo", obs.data), radius=0.025)
     )
 ).drain()
 print("brightness done")
@@ -80,7 +80,7 @@ drawing_speed.add(costmap)
 
 store.streams.color_image.transform(speed()).transform(smooth(20)).transform(normalize()).tap(
     lambda obs: drawing_speed.add(
-        Point(obs.pose_stamped, color=color(obs.data, cmap="turbo"), radius=0.025)
+        Point(obs.pose_stamped, color=Color.from_cmap("turbo", obs.data), radius=0.025)
     )
 ).drain()
 
@@ -109,7 +109,7 @@ similarity_stream = (
 
 similarity_stream.transform(normalize()).tap(
     lambda obs: drawing.add(
-        Point(obs.pose_stamped, color=color(obs.data, cmap="turbo"), radius=0.025)
+        Point(obs.pose_stamped, color=Color.from_cmap("turbo", obs.data), radius=0.025)
     )
 ).drain()
 

@@ -32,6 +32,7 @@ import numpy as np
 from PIL import Image as PILImage
 
 from dimos.memory2.type.observation import Observation
+from dimos.memory2.vis.color import Color
 from dimos.memory2.vis.space.elements import (
     Arrow,
     Box3D,
@@ -82,6 +83,13 @@ def _y(wy: float) -> float:
     return -wy
 
 
+def _style(el: object) -> tuple[str, float]:
+    """Return (hex, combined-alpha) from an element's color and opacity."""
+    c = Color.coerce(getattr(el, "color", "#000000"))
+    opacity = float(getattr(el, "opacity", 1.0))
+    return c.hex(), c.a * opacity
+
+
 # Element renderers — all emit world-coordinate SVG and grow Bounds
 
 
@@ -90,11 +98,12 @@ def _render_point(el: Point, b: Bounds) -> str:
     r = el.radius
     b.include(x - r, y - r)
     b.include(x + r, y + r)
-    parts = [f'<circle cx="{x:.4f}" cy="{y:.4f}" r="{r:.4f}" fill="{el.color}" opacity="0.85"/>']
+    fill, alpha = _style(el)
+    parts = [f'<circle cx="{x:.4f}" cy="{y:.4f}" r="{r:.4f}" fill="{fill}" opacity="{alpha:.3f}"/>']
     if el.label:
         parts.append(
             f'<text x="{x + r:.4f}" y="{y:.4f}" '
-            f'font-size="{r * 1.5:.4f}" fill="{el.color}">{_esc(el.label)}</text>'
+            f'font-size="{r * 1.5:.4f}" fill="{fill}" opacity="{alpha:.3f}">{_esc(el.label)}</text>'
         )
     return "\n".join(parts)
 
@@ -117,20 +126,23 @@ def _render_arrow(el: Arrow, b: Bounds) -> str:
     for px, py in [(x, y), (tx, ty), (bx1, by1), (bx2, by2)]:
         b.include(px, py)
 
+    stroke, alpha = _style(el)
     return (
         f'<polygon points="{tx:.4f},{ty:.4f} {bx1:.4f},{by1:.4f} {bx2:.4f},{by2:.4f}" '
-        f'fill="none" stroke="{el.color}" stroke-width="{length * 0.08:.4f}" stroke-linejoin="round"/>'
+        f'fill="none" stroke="{stroke}" opacity="{alpha:.3f}" '
+        f'stroke-width="{length * 0.08:.4f}" stroke-linejoin="round"/>'
     )
 
 
 def _render_pose(el: Pose, b: Bounds) -> str:
-    arrow = Arrow(msg=el.msg, length=el.size, color=el.color)
+    arrow = Arrow(msg=el.msg, length=el.size, color=el.color, opacity=el.opacity)
     parts = [_render_arrow(arrow, b)]
     if el.label:
         x, y = el.msg.x, _y(el.msg.y)
+        fill, alpha = _style(el)
         parts.append(
             f'<text x="{x + el.size * 0.5:.4f}" y="{y:.4f}" '
-            f'font-size="{el.size * 0.8:.4f}" fill="{el.color}">{_esc(el.label)}</text>'
+            f'font-size="{el.size * 0.8:.4f}" fill="{fill}" opacity="{alpha:.3f}">{_esc(el.label)}</text>'
         )
     return "\n".join(parts)
 
@@ -141,9 +153,11 @@ def _render_polyline(el: Polyline, b: Bounds) -> str:
         x, y = p.x, _y(p.y)
         b.include(x, y)
         pts.append(f"{x:.4f},{y:.4f}")
+    stroke, alpha = _style(el)
     return (
         f'<polyline points="{" ".join(pts)}" fill="none" '
-        f'stroke="{el.color}" stroke-width="{el.width:.4f}" stroke-linejoin="round"/>'
+        f'stroke="{stroke}" opacity="{alpha:.3f}" '
+        f'stroke-width="{el.width:.4f}" stroke-linejoin="round"/>'
     )
 
 
@@ -157,14 +171,16 @@ def _render_box3d(el: Box3D, b: Bounds) -> str:
     h = el.size.y
     b.include(x, y)
     b.include(x + w, y + h)
+    stroke, alpha = _style(el)
     parts = [
         f'<rect x="{x:.4f}" y="{y:.4f}" width="{w:.4f}" height="{h:.4f}" '
-        f'fill="none" stroke="{el.color}" stroke-width="{min(w, h) * 0.04:.4f}"/>'
+        f'fill="none" stroke="{stroke}" opacity="{alpha:.3f}" '
+        f'stroke-width="{min(w, h) * 0.04:.4f}"/>'
     ]
     if el.label:
         parts.append(
             f'<text x="{x:.4f}" y="{y - h * 0.05:.4f}" '
-            f'font-size="{h * 0.3:.4f}" fill="{el.color}">{_esc(el.label)}</text>'
+            f'font-size="{h * 0.3:.4f}" fill="{stroke}" opacity="{alpha:.3f}">{_esc(el.label)}</text>'
         )
     return "\n".join(parts)
 
@@ -172,6 +188,7 @@ def _render_box3d(el: Box3D, b: Bounds) -> str:
 def _render_camera(el: Camera, b: Bounds) -> str:
     x, y = el.pose.x, _y(el.pose.y)
     yaw = el.pose.yaw
+    stroke, alpha = _style(el)
 
     if el.camera_info and el.camera_info.K[4] > 0:
         fy = el.camera_info.K[4]
@@ -191,18 +208,20 @@ def _render_camera(el: Camera, b: Bounds) -> str:
 
         parts = [
             f'<polygon points="{x:.4f},{y:.4f} {x1:.4f},{y1:.4f} {x2:.4f},{y2:.4f}" '
-            f'fill="none" stroke="{el.color}" stroke-width="0.03"/>'
+            f'fill="none" stroke="{stroke}" opacity="{alpha:.3f}" stroke-width="0.03"/>'
         ]
     else:
         r = 0.15
         b.include(x - r, y - r)
         b.include(x + r, y + r)
-        parts = [f'<circle cx="{x:.4f}" cy="{y:.4f}" r="{r:.4f}" fill="{el.color}" opacity="0.8"/>']
+        parts = [
+            f'<circle cx="{x:.4f}" cy="{y:.4f}" r="{r:.4f}" fill="{stroke}" opacity="{alpha:.3f}"/>'
+        ]
 
     if el.label:
         parts.append(
             f'<text x="{x + 0.2:.4f}" y="{y:.4f}" '
-            f'font-size="0.3" fill="{el.color}">{_esc(el.label)}</text>'
+            f'font-size="0.3" fill="{stroke}" opacity="{alpha:.3f}">{_esc(el.label)}</text>'
         )
     return "\n".join(parts)
 
@@ -210,9 +229,10 @@ def _render_camera(el: Camera, b: Bounds) -> str:
 def _render_text(el: Text, b: Bounds) -> str:
     x, y = el.position[0], _y(el.position[1])
     b.include(x, y)
+    fill, alpha = _style(el)
     return (
         f'<text x="{x:.4f}" y="{y:.4f}" '
-        f'font-size="{el.font_size:.4f}" fill="{el.color}">{_esc(el.text)}</text>'
+        f'font-size="{el.font_size:.4f}" fill="{fill}" opacity="{alpha:.3f}">{_esc(el.text)}</text>'
     )
 
 

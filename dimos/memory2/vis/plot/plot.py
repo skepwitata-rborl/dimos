@@ -82,8 +82,10 @@ class Plot:
 
     def to_svg(self, path: str | None = None) -> str:
         """Render to SVG string. Optionally write to file."""
+        from dimos.memory2.vis.color import resolve_deferred
         from dimos.memory2.vis.plot.svg import render
 
+        resolve_deferred(self._elements)
         svg = render(self)
         if path is not None:
             with open(path, "w") as f:
@@ -92,8 +94,10 @@ class Plot:
 
     def to_rerun(self, app_id: str = "plot", spawn: bool = True) -> None:
         """Render to Rerun viewer (placeholder — currently a no-op)."""
+        from dimos.memory2.vis.color import resolve_deferred
         from dimos.memory2.vis.plot.rerun import render
 
+        resolve_deferred(self._elements)
         render(self, app_id=app_id, spawn=spawn)
 
     def _repr_svg_(self) -> str:

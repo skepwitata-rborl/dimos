@@ -27,7 +27,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Union
 
-from dimos.memory2.vis.color import Color
+from dimos.memory2.vis.color import Color, DeferredColor
+
+ColorLike = Union[str, Color, DeferredColor]
 
 if TYPE_CHECKING:
     from dimos.memory2.type.observation import Observation
@@ -52,9 +54,10 @@ class Pose:
     """
 
     msg: PoseStamped | GeoPose
-    color: str | Color = "#1abc9c"
+    color: ColorLike = "#1abc9c"
     size: float = 0.3
     label: str | None = None
+    opacity: float = 1.0
 
 
 @dataclass
@@ -66,8 +69,9 @@ class Arrow:
     """
 
     msg: PoseStamped | GeoPose
-    color: str | Color = "#e67e22"
+    color: ColorLike = "#e67e22"
     length: float = 0.5
+    opacity: float = 1.0
 
 
 @dataclass
@@ -80,9 +84,10 @@ class Point:
     """
 
     msg: GeoPoint | GeoPose
-    color: str | Color = "#e74c3c"
+    color: ColorLike = "#e74c3c"
     radius: float = 0.05
     label: str | None = None
+    opacity: float = 1.0
 
 
 @dataclass
@@ -96,8 +101,9 @@ class Box3D:
 
     center: GeoPose
     size: Vector3
-    color: str | Color = "#f1c40f"
+    color: ColorLike = "#f1c40f"
     label: str | None = None
+    opacity: float = 1.0
 
 
 @dataclass
@@ -111,8 +117,9 @@ class Camera:
     pose: PoseStamped
     image: Image | None = None
     camera_info: CameraInfo | None = None
-    color: str | Color = "#9b59b6"
+    color: ColorLike = "#9b59b6"
     label: str | None = None
+    opacity: float = 1.0
 
 
 @dataclass
@@ -124,8 +131,9 @@ class Polyline:
     """
 
     msg: Path
-    color: str | Color = "#3498db"
+    color: ColorLike = "#3498db"
     width: float = 0.05
+    opacity: float = 1.0
 
 
 @dataclass
@@ -139,7 +147,8 @@ class Text:
     position: tuple[float, float, float]
     text: str
     font_size: float = 12.0
-    color: str | Color = "#333333"
+    color: ColorLike = "#333333"
+    opacity: float = 1.0
 
 
 SpaceElement = Union[

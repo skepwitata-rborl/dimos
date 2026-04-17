@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 import matplotlib
 import matplotlib.pyplot as plt
 
-from dimos.memory2.vis.color import palette_iter
+from dimos.memory2.vis.color import Color, palette_iter
 from dimos.memory2.vis.plot.elements import HLine, Markers, Series, VLine
 from dimos.memory2.vis.plot.plot import TimeAxis
 
@@ -145,60 +145,61 @@ def render(plot: Plot, width: float = 10, height: float = 3.5) -> str:
         # Series/Markers landed on it) so we can color-code its spine and tick
         # labels after the plot loop. Primary axis stays neutral so its ticks
         # read as the baseline.
-        axis_colors: dict[str, str] = {}
+        axis_colors: dict[str, tuple[float, float, float, float]] = {}
+
+        def mpl_color(c: Color, opacity: float) -> tuple[float, float, float, float]:
+            return c.with_alpha(c.a * opacity).rgba_f()
 
         for el in plot.elements:
             # VLine has no axis field — it always draws on the primary.
             target = ax if isinstance(el, VLine) else axis_for(el.axis)
-            color = el.color
-            if color is None and isinstance(el, (Series, Markers)):
-                color = next(color_iter)
+            raw: str | Color | None = el.color
+            if raw is None and isinstance(el, (Series, Markers)):
+                raw = next(color_iter)
+            color = Color.coerce(raw) if raw is not None else None
+            rgba = mpl_color(color, el.opacity) if color is not None else None
             if (
                 not isinstance(el, VLine)
                 and el.axis is not None
                 and el.axis not in axis_colors
                 and isinstance(el, (Series, Markers))
-                and color is not None
+                and rgba is not None
             ):
-                axis_colors[el.axis] = color
+                axis_colors[el.axis] = rgba
             if isinstance(el, Series):
                 ts, values = _break_on_gaps(el.ts, el.values, el.connect, el.gap_fill)
                 target.plot(
                     ts,
                     values,
-                    color=color,
+                    color=rgba,
                     linewidth=el.width,
                     label=el.label,
-                    alpha=el.opacity,
                     linestyle=el.style.value,
                 )
             elif isinstance(el, Markers):
                 target.scatter(
                     el.ts,
                     el.values,
-                    color=color,
+                    color=rgba,
                     s=el.radius**2 * 10,
                     label=el.label,
-                    alpha=el.opacity,
                 )
             elif isinstance(el, HLine):
                 target.axhline(
                     el.y,
-                    color=el.color,
+                    color=rgba,
                     linestyle=el.style.value,
                     linewidth=1,
                     label=el.label,
-                    alpha=el.opacity,
                 )
             elif isinstance(el, VLine):
                 # Always on the primary — twins share x, so visually identical.
                 ax.axvline(
                     el.x,
-                    color=el.color,
+                    color=rgba,
                     linestyle=el.style.value,
                     linewidth=1,
                     label=el.label,
-                    alpha=el.opacity,
                 )
 
         # Thin spine + tick borders (1px) on every axes — primary and twins.

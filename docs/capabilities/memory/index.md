@@ -5,7 +5,7 @@ import pickle
 from dimos.mapping.pointclouds.occupancy import general_occupancy, simple_occupancy, height_cost_occupancy
 from dimos.mapping.occupancy.inflation import simple_inflate
 from dimos.memory2.store.sqlite import SqliteStore
-from dimos.memory2.vis.color import color
+from dimos.memory2.vis.color import Color
 from dimos.memory2.transform import downsample, throttle, speed, smooth
 from dimos.memory2.vis.space.space import Space
 from dimos.utils.data import get_data

@@ -24,7 +24,7 @@ from __future__ import annotations
 from typing import Any
 
 from dimos.memory2.type.observation import EmbeddedObservation, Observation
-from dimos.memory2.vis.color import Color, color as resolve_color
+from dimos.memory2.vis.color import ColorRange, resolve_deferred
 from dimos.memory2.vis.space.elements import (
     Arrow,
     Box3D,
@@ -45,18 +45,16 @@ from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.msgs.vision_msgs.Detection3D import Detection3D
 
 
-def _autocolor(item: Any, group: str, cmap: str = "turbo") -> Color | None:
-    """Extract a Color from an item, or None if not auto-colorable."""
+def _autocolor_value(item: Any) -> float | None:
+    """Extract the scalar to colormap for an item, or None if not auto-colorable."""
     if isinstance(item, EmbeddedObservation):
-        return Color(group, item.similarity or 0.0, cmap=cmap)
+        return float(item.similarity or 0.0)
     if isinstance(item, Observation):
-        if item.data_type == float:
-            return Color(group, item.data, cmap=cmap)
-        if item.data_type == int:
-            return Color(group, item.data, cmap=cmap)
-        return Color(group, item.ts, cmap=cmap)
+        if item.data_type in (float, int):
+            return float(item.data)
+        return float(item.ts)
     if isinstance(item, (int, float)):
-        return Color(group, float(item), cmap=cmap)
+        return float(item)
     return None
 
 
@@ -73,7 +71,7 @@ class Space:
 
     def __init__(self) -> None:
         self._elements: list[SpaceElement] = []
-        self._group_seq: int = 0
+        self._autocolor_ranges: list[ColorRange] = []
 
     def add(self, element: Any, **kwargs: Any) -> Space:
         """Add an element with smart dispatch.
@@ -92,13 +90,13 @@ class Space:
         elif isinstance(element, Observation):
             self.add_observation(element, **kwargs)
         elif hasattr(element, "__iter__"):
-            self._group_seq += 1
-            group = f"auto_{self._group_seq}"
             cmap = kwargs.pop("cmap", "turbo")
+            color_range = ColorRange(cmap=cmap)
+            self._autocolor_ranges.append(color_range)
             for item in element:
-                c = _autocolor(item, group, cmap=cmap)
-                if c is not None and isinstance(item, Observation):
-                    self._elements.append(Arrow(msg=item.pose_stamped, color=c))
+                v = _autocolor_value(item)
+                if v is not None and isinstance(item, Observation):
+                    self._elements.append(Arrow(msg=item.pose_stamped, color=color_range(v)))
                 else:
                     self.add(item, **kwargs)
         else:
@@ -150,30 +148,11 @@ class Space:
         """Add an OccupancyGrid as the background map."""
         return self.add(grid)
 
-    def _resolve_colors(self) -> None:
-        """Resolve all Color objects to hex strings using per-group auto-ranging."""
-        groups: dict[str, list[float]] = {}
-        for el in self._elements:
-            c = getattr(el, "color", None)
-            if isinstance(c, Color) and c.value is not None:
-                groups.setdefault(c.group, []).append(c.value)
-
-        if not groups:
-            return
-
-        ranges = {g: (min(vs), max(vs)) for g, vs in groups.items()}
-
-        for el in self._elements:
-            c = getattr(el, "color", None)
-            if isinstance(c, Color) and c.value is not None:
-                lo, hi = ranges[c.group]
-                el.color = resolve_color(c.value, lo, hi, c.cmap)  # type: ignore[union-attr]
-
     def to_svg(self, path: str | None = None) -> str:
         """Render to SVG string. Optionally write to file."""
         from dimos.memory2.vis.space.svg import render
 
-        self._resolve_colors()
+        resolve_deferred(self._elements)
         svg = render(self)
         if path is not None:
             with open(path, "w") as f:
@@ -184,7 +163,7 @@ class Space:
         """Render to Rerun viewer."""
         from dimos.memory2.vis.space.rerun import render
 
-        self._resolve_colors()
+        resolve_deferred(self._elements)
         render(self, app_id=app_id, spawn=spawn)
 
     def _repr_svg_(self) -> str:

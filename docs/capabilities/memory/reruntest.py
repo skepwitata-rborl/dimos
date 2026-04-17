@@ -19,7 +19,7 @@ from dimos.mapping.occupancy.inflation import simple_inflate
 from dimos.mapping.pointclouds.occupancy import general_occupancy
 from dimos.memory2.store.sqlite import SqliteStore
 from dimos.memory2.transform import normalize, smooth
-from dimos.memory2.vis.color import color
+from dimos.memory2.vis.color import Color
 from dimos.memory2.vis.space.elements import Point
 from dimos.memory2.vis.space.space import Space
 from dimos.memory2.vis.utils import mosaic
@@ -43,13 +43,13 @@ search_text = "robot"
 search_vector = clip.embed_text(search_text)
 
 # store.streams.color_image.transform(speed()).transform(smooth(30)).transform(normalize()).tap(
-#    lambda obs: drawing.add(Point(obs.pose_stamped, color=color(obs.data, cmap="turbo")))
+#    lambda obs: drawing.add(Point(obs.pose_stamped, color=Color.from_cmap("turbo", obs.data)))
 # ).drain()
 
 store.streams.color_image.map(lambda obs: obs.derive(data=obs.data.brightness)).transform(
     smooth(30)
 ).transform(normalize()).tap(
-    lambda obs: drawing.add(Point(obs.pose_stamped, color=color(obs.data, cmap="turbo")))
+    lambda obs: drawing.add(Point(obs.pose_stamped, color=Color.from_cmap("turbo", obs.data)))
 ).drain()
 
 

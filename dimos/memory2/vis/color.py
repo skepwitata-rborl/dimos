@@ -12,7 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Color mapping utilities for memory2 visualization."""
+"""Color type and utilities for memory2 visualization.
+
+Canonical storage is RGBA float 0-1 (matplotlib-native, easy to blend). All
+consumers convert at the boundary:
+
+    matplotlib: Color.rgba_f()     → (r, g, b, a)
+    SVG:        Color.hex() + a    → "#rrggbb" + opacity="..."
+    rerun:      Color.rgb_u8()     → (r, g, b) u8
+    PIL:        Color.rgba_u8()    → (r, g, b, a) u8
+
+Use ``Color.from_hex("#3498db")`` or a palette name (``"red"``, ``"blue"``, …)
+to construct. Use ``ColorRange(cmap)`` + ``range(value)`` for cmap-deferred
+colors whose min/max is learned as you add elements.
+"""
 
 from __future__ import annotations
 
@@ -20,22 +33,7 @@ from collections.abc import Iterable, Iterator
 import colorsys
 from dataclasses import dataclass
 import functools
-
-
-@dataclass
-class Color:
-    """Deferred color resolved at render time from a value range.
-
-    Elements with the same ``group`` share an auto-computed min/max range.
-    Can be used as a factory: ``speed = Color("speed", cmap="turbo"); speed(2.5)``.
-    """
-
-    group: str
-    value: float | None = None
-    cmap: str = "turbo"
-
-    def __call__(self, value: float) -> Color:
-        return Color(group=self.group, value=value, cmap=self.cmap)
+from typing import Any
 
 
 @functools.lru_cache(maxsize=16)
@@ -45,21 +43,135 @@ def _cmap(name: str):  # type: ignore[no-untyped-def]
     return plt.get_cmap(name)
 
 
-def hex_to_rgb(hex_color: str | Color) -> tuple[int, int, int]:
-    """Convert a hex color string like '#1abc9c' to an (R, G, B) tuple."""
-    if not isinstance(hex_color, str):
-        raise TypeError(f"Expected resolved hex string, got {type(hex_color).__name__}")
-    hex_color = hex_color.lstrip("#")
-    if len(hex_color) == 3:
-        hex_color = "".join(c * 2 for c in hex_color)
-    return (int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16))
+@dataclass(frozen=True, eq=False)
+class Color:
+    """Concrete RGBA color, stored as floats in [0, 1].
+
+    Immutable — all manipulation methods return a new instance.
+    """
+
+    r: float
+    g: float
+    b: float
+    a: float = 1.0
+
+    @classmethod
+    def from_hex(cls, s: str) -> Color:
+        """Parse ``#rrggbb`` / ``#rgb`` or a palette name (``"red"``, …)."""
+        if not s.startswith("#"):
+            try:
+                return _PALETTE_NAMES[s.lower()]
+            except KeyError:
+                raise ValueError(
+                    f"Unknown color name {s!r}. Use a hex string (#rrggbb) "
+                    f"or one of the palette names: {sorted(_PALETTE_NAMES)}"
+                ) from None
+        h = s.lstrip("#")
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        if len(h) != 6:
+            raise ValueError(f"Invalid hex color {s!r}")
+        return cls(int(h[0:2], 16) / 255, int(h[2:4], 16) / 255, int(h[4:6], 16) / 255)
+
+    @classmethod
+    def from_cmap(cls, cmap: str, t: float) -> Color:
+        """Sample a matplotlib colormap at ``t`` (clamped to [0, 1])."""
+        r, g, b, a = _cmap(cmap)(max(0.0, min(1.0, t)))
+        return cls(r, g, b, a)
+
+    @classmethod
+    def coerce(cls, x: Color | DeferredColor | str) -> Color:
+        """Normalize any accepted color form to a concrete ``Color``."""
+        if isinstance(x, Color):
+            return x
+        if isinstance(x, DeferredColor):
+            return x.resolve()
+        return cls.from_hex(x)
+
+    def hex(self) -> str:
+        """``#rrggbb`` — alpha is dropped; SVG pairs this with an ``opacity`` attribute."""
+        return f"#{round(self.r * 255):02x}{round(self.g * 255):02x}{round(self.b * 255):02x}"
+
+    def rgb_u8(self) -> tuple[int, int, int]:
+        return (round(self.r * 255), round(self.g * 255), round(self.b * 255))
+
+    def rgba_u8(self) -> tuple[int, int, int, int]:
+        return (*self.rgb_u8(), round(self.a * 255))
+
+    def rgba_f(self) -> tuple[float, float, float, float]:
+        return (self.r, self.g, self.b, self.a)
+
+    def with_alpha(self, a: float) -> Color:
+        return Color(self.r, self.g, self.b, a)
+
+    def blend(self, other: Color, t: float) -> Color:
+        """Linear RGB blend: ``t=0`` → self, ``t=1`` → other."""
+        t = max(0.0, min(1.0, t))
+        return Color(
+            self.r + (other.r - self.r) * t,
+            self.g + (other.g - self.g) * t,
+            self.b + (other.b - self.b) * t,
+            self.a + (other.a - self.a) * t,
+        )
+
+    def __str__(self) -> str:
+        return self.hex()
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Color):
+            return (self.r, self.g, self.b, self.a) == (other.r, other.g, other.b, other.a)
+        if isinstance(other, str):
+            try:
+                return self.hex() == Color.from_hex(other).hex()
+            except ValueError:
+                return False
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash((self.r, self.g, self.b, self.a))
 
 
-def color(value: float, lo: float = 0.0, hi: float = 1.0, cmap: str = "turbo") -> str:
-    """Map a value in [lo, hi] to a hex color string via a matplotlib colormap."""
-    t = max(0.0, min(1.0, (value - lo) / (hi - lo))) if hi != lo else 0.5
-    r, g, b, _ = _cmap(cmap)(t)
-    return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+class ColorRange:
+    """Tracks value min/max as you call it; returns :class:`DeferredColor` instances.
+
+    Each ``ColorRange`` is its own aggregator — no cross-plot bleed, no global
+    registry. The returned ``DeferredColor`` resolves to a cmap-sampled
+    :class:`Color` at render time using the final min/max.
+    """
+
+    def __init__(self, cmap: str = "turbo") -> None:
+        self.cmap = cmap
+        self._lo: float | None = None
+        self._hi: float | None = None
+
+    def __call__(self, value: float) -> DeferredColor:
+        self._lo = value if self._lo is None else min(self._lo, value)
+        self._hi = value if self._hi is None else max(self._hi, value)
+        return DeferredColor(self, value)
+
+
+@dataclass(frozen=True)
+class DeferredColor:
+    """A value tagged with a :class:`ColorRange`; resolves lazily to :class:`Color`."""
+
+    range: ColorRange
+    value: float
+
+    def resolve(self) -> Color:
+        lo, hi = self.range._lo, self.range._hi
+        t = 0.5 if lo is None or hi is None or lo == hi else (self.value - lo) / (hi - lo)
+        return Color.from_cmap(self.range.cmap, t)
+
+    def __str__(self) -> str:
+        return self.resolve().hex()
+
+
+def resolve_deferred(elements: Iterable[Any]) -> None:
+    """Mutate ``el.color`` from :class:`DeferredColor` → :class:`Color` for each element."""
+    for el in elements:
+        c = getattr(el, "color", None)
+        if isinstance(c, DeferredColor):
+            el.color = c.resolve()  # type: ignore[misc]
 
 
 # Named palette: 12 visually-distinct colors that share visual weight.
@@ -72,20 +184,20 @@ def color(value: float, lo: float = 0.0, hi: float = 1.0, cmap: str = "turbo") -
 # maximally-distinct hues. Beyond 12, `palette_iter` continues with a
 # golden-angle hue walk that uses the same average L/S.
 
-blue = "#3498db"
-red = "#e74c3c"
-yellow = "#f1c40f"
-teal = "#1abc9c"
-purple = "#9b59b6"
-orange = "#e67e22"
-green = "#4cdc29"
-magenta = "#dc2994"
-indigo = "#3329dc"
-cyan = "#29c9dc"
-vermilion = "#dc5b29"
-amber = "#dc9a29"
+blue = Color.from_hex("#3498db")
+red = Color.from_hex("#e74c3c")
+yellow = Color.from_hex("#f1c40f")
+teal = Color.from_hex("#1abc9c")
+purple = Color.from_hex("#9b59b6")
+orange = Color.from_hex("#e67e22")
+green = Color.from_hex("#4cdc29")
+magenta = Color.from_hex("#dc2994")
+indigo = Color.from_hex("#3329dc")
+cyan = Color.from_hex("#29c9dc")
+vermilion = Color.from_hex("#dc5b29")
+amber = Color.from_hex("#dc9a29")
 
-PALETTE: list[str] = [
+PALETTE: list[Color] = [
     blue,
     red,
     yellow,
@@ -100,50 +212,60 @@ PALETTE: list[str] = [
     amber,
 ]
 
-
-def _hex_to_hls(hex_color: str) -> tuple[float, float, float]:
-    r, g, b = hex_to_rgb(hex_color)
-    return colorsys.rgb_to_hls(r / 255, g / 255, b / 255)
-
-
-def _hls_to_hex(h: float, l: float, s: float) -> str:
-    r, g, b = colorsys.hls_to_rgb(h % 1.0, l, s)
-    return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+_PALETTE_NAMES: dict[str, Color] = {
+    "blue": blue,
+    "red": red,
+    "yellow": yellow,
+    "teal": teal,
+    "purple": purple,
+    "orange": orange,
+    "green": green,
+    "magenta": magenta,
+    "indigo": indigo,
+    "cyan": cyan,
+    "vermilion": vermilion,
+    "amber": amber,
+}
 
 
 def palette_iter(
-    palette: list[str] = PALETTE,
-    exclude: Iterable[str] | None = None,
-) -> Iterator[str]:
+    palette: list[Color] = PALETTE,
+    exclude: Iterable[Color | str] | None = None,
+) -> Iterator[Color]:
     """Yield colors forever for auto-assigning Series/Markers.
 
     Yields ``palette`` in order, then continues indefinitely via a
-    golden-angle (137.5°) hue walk anchored at the average L/S of
-    ``palette`` so generated colors share visual weight with the named
-    ones.
+    golden-angle (137.5°) hue walk anchored at the average L/S of ``palette``
+    so generated colors share visual weight with the named ones.
 
-    ``exclude`` is a set of hex strings (e.g. colors the user has already
-    pinned to specific series) to skip — case-insensitive.
+    ``exclude`` skips already-pinned colors; accepts ``Color`` or hex/name strings.
     """
-    excluded = {c.lower() for c in (exclude or ())}
+    excluded: set[str] = set()
+    for x in exclude or ():
+        try:
+            excluded.add(Color.coerce(x).hex())
+        except ValueError:
+            pass  # unknown string — nothing to exclude
+
+    def emit(c: Color) -> bool:
+        return c.hex() not in excluded
 
     for c in palette:
-        if c.lower() not in excluded:
+        if emit(c):
             yield c
 
     if not palette:
         return
 
-    hls = [_hex_to_hls(c) for c in palette]
+    hls = [colorsys.rgb_to_hls(c.r, c.g, c.b) for c in palette]
     avg_l = sum(p[1] for p in hls) / len(hls)
     avg_s = sum(p[2] for p in hls) / len(hls)
-
     # Anchor the walk on the last palette color's hue so the first
     # generated color is offset 137.5° from the end of the named set.
-    last_hue = _hex_to_hls(palette[-1])[0]
-    golden = 137.5 / 360.0
+    hue = hls[-1][0]
     while True:
-        last_hue = (last_hue + golden) % 1.0
-        c = _hls_to_hex(last_hue, avg_l, avg_s)
-        if c.lower() not in excluded:
+        hue = (hue + 137.5 / 360.0) % 1.0
+        r, g, b = colorsys.hls_to_rgb(hue, avg_l, avg_s)
+        c = Color(r, g, b)
+        if emit(c):
             yield c

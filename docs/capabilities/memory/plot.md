@@ -27,6 +27,11 @@ color_check.to_svg("assets/plot_colors.svg")
 ```
 
 
+
+
+
+
+
 ![output](assets/plot_colors.svg)
 
 named colors can also be used explicitly. when you pin a series to one of
@@ -48,6 +53,11 @@ p.add(Series(ts=xs, values=[math.sin(2 * x) for x in xs]))
 p.add(HLine(y=0, style=Style.dashed, opacity=0.5, color="#ff0000"))
 p.to_svg("assets/plot_named.svg")
 ```
+
+
+
+
+
 
 ![output](assets/plot_named.svg)
 
@@ -89,6 +99,11 @@ plot.add(
 
 plot.to_svg("assets/plot_robot_data.svg")
 ```
+
+
+
+
+
 
 ![output](assets/plot_robot_data.svg)
 
@@ -174,6 +189,11 @@ plot.to_svg("assets/plot_plantness_brightness.svg")
 ```
 
 
+
+
+
+
+
 ![output](assets/plot_plantness_brightness.svg)
 We see that stuff isn't embedded below some minimum brightness.
 
@@ -195,20 +215,27 @@ plot.to_svg("assets/plot_plantness_gap_fill.svg")
 
 ```
 
+
+
+
+
+
 ![output](assets/plot_plantness_gap_fill.svg)
 
 Looks better, these are some very obvious peaks, I'm curious let's see what was captured then.
 
 ```python session=robotdata
 from dimos.memory2.transform import peaks
+from dimos.memory2.vis.color import ColorRange
 from dimos.memory2.vis.plot.elements import VLine
 from dimos.memory2.vis.utils import mosaic
 
-peaks = plantness_query_cached.transform(peaks(key=lambda obs: obs.similarity, distance=5.0))
+peaks = plantness_query_cached.transform(peaks(key=lambda obs: obs.similarity, distance=1.0))
 
-for p in peaks:
+peakColor = ColorRange("turbo")
+for i, p in enumerate(peaks):
     print(f"t={p.ts - plantness_similarity.first().ts:6.1f}s score={p.similarity:.3f} prominence={p.tags['peak_prominence']:.3f}")
-    plot.add(VLine(p.ts, color=color.red))
+    plot.add(VLine(p.ts, color=peakColor(i)))
 
 plot.to_svg("assets/plot_plantness_autopeaks.svg")
 
@@ -225,8 +252,15 @@ m.data.save("assets/plants_auto.png")
 
 <!--Result:-->
 ```
+t=  14.1s score=0.224 prominence=0.031
+t=  26.3s score=0.225 prominence=0.033
 t=  37.0s score=0.259 prominence=0.067
+t=  60.6s score=0.227 prominence=0.031
+t=  76.3s score=0.221 prominence=0.031
+t= 162.9s score=0.224 prominence=0.041
+t= 168.0s score=0.219 prominence=0.031
 t= 240.4s score=0.243 prominence=0.047
+t= 279.6s score=0.230 prominence=0.030
 ```
 
 ![output](assets/plot_plantness_autopeaks.svg)

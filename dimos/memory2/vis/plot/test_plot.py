@@ -216,7 +216,7 @@ class TestPlotSVG:
         svg = p.to_svg()
         assert "<svg" in svg
         assert "marker" in svg
-        assert color.red in svg
+        assert color.red.hex() in svg
 
     def test_vline_add_dispatch(self):
         # VLine should be storable via Plot.add() like the other element types.
@@ -290,11 +290,11 @@ class TestPlotSVG:
         p.add(Series(ts=[0, 1], values=[4, 5]))  # auto → yellow (red is excluded)
         svg = p.to_svg()
         # Both blue and yellow should appear, plus the explicit red.
-        assert color.blue in svg
-        assert color.red in svg
-        assert color.yellow in svg
+        assert color.blue.hex() in svg
+        assert color.red.hex() in svg
+        assert color.yellow.hex() in svg
         # Red should appear exactly once (the explicit one, not from the cycle).
-        assert svg.count(color.red) == 1
+        assert svg.count(color.red.hex()) == 1
 
 
 class TestPlotRepr:
@@ -324,8 +324,8 @@ class TestPalette:
 
         assert color.blue == "#3498db"
         assert color.red == "#e74c3c"
-        assert color.green.startswith("#")
-        assert color.amber.startswith("#")
+        assert color.green.hex().startswith("#")
+        assert color.amber.hex().startswith("#")
         assert len(color.PALETTE) == 12
         assert color.PALETTE[0] == color.blue
         assert color.PALETTE[6] == color.green
@@ -341,8 +341,8 @@ class TestPalette:
 
         it = color.palette_iter()
         first_thirteen = [next(it) for _ in range(13)]
-        # 13th color is generated, must be a hex string and distinct from all 12 named.
-        assert first_thirteen[12].startswith("#")
+        # 13th color is generated, must be a valid Color and distinct from all 12 named.
+        assert first_thirteen[12].hex().startswith("#")
         assert first_thirteen[12] not in color.PALETTE
 
     def test_palette_iter_excludes(self):

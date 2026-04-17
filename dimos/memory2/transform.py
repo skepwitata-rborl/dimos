@@ -166,7 +166,7 @@ def smooth(window: int) -> FnIterTransformer[float, float]:
 
 
 def peaks(
-    prominence: float = 0.045,
+    prominence: float = 0.03,
     distance: float = 5.0,
     width: float | None = 0.5,
     key: Callable[[Observation[T]], float] | None = None,

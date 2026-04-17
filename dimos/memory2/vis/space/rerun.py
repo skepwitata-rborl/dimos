@@ -20,7 +20,7 @@ import math
 from typing import TYPE_CHECKING, Any
 
 from dimos.memory2.type.observation import Observation
-from dimos.memory2.vis.color import hex_to_rgb
+from dimos.memory2.vis.color import Color
 from dimos.memory2.vis.space.elements import Arrow, Box3D, Camera, Point, Polyline, Pose, Text
 from dimos.msgs.geometry_msgs.Quaternion import Quaternion
 from dimos.msgs.geometry_msgs.Transform import Transform
@@ -30,6 +30,14 @@ from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 
 if TYPE_CHECKING:
     from dimos.memory2.vis.space.space import Space
+
+
+def _rgba(el: Any) -> tuple[int, int, int, int]:
+    """Combine element color + opacity into an RGBA u8 tuple for rerun."""
+    c = Color.coerce(getattr(el, "color", "#000000"))
+    opacity = float(getattr(el, "opacity", 1.0))
+    return c.with_alpha(c.a * opacity).rgba_u8()
+
 
 # base_link → camera_optical extrinsics (applied at render time for image observations)
 _BASE_TO_OPTICAL = Transform(
@@ -130,7 +138,7 @@ def render(space: Space, app_id: str = "space", spawn: bool = True) -> None:
             "scene/points",
             rr.Points3D(
                 positions=[[p.msg.x, p.msg.y, p.msg.z] for p in points],
-                colors=[hex_to_rgb(p.color) for p in points],
+                colors=[_rgba(p) for p in points],
                 radii=[max(p.radius, 0.05) for p in points],
                 labels=[p.label or "" for p in points] if any(p.label for p in points) else None,
             ),
@@ -142,7 +150,7 @@ def render(space: Space, app_id: str = "space", spawn: bool = True) -> None:
             "scene/poses",
             rr.Points3D(
                 positions=[[p.msg.x, p.msg.y, 0] for p in poses],
-                colors=[hex_to_rgb(p.color) for p in poses],
+                colors=[_rgba(p) for p in poses],
                 radii=[p.size * 0.3 for p in poses],
                 labels=[p.label or "" for p in poses] if any(p.label for p in poses) else None,
             ),
@@ -155,7 +163,7 @@ def render(space: Space, app_id: str = "space", spawn: bool = True) -> None:
                 vectors=[
                     [math.cos(p.msg.yaw) * p.size, math.sin(p.msg.yaw) * p.size, 0] for p in poses
                 ],
-                colors=[hex_to_rgb(p.color) for p in poses],
+                colors=[_rgba(p) for p in poses],
             ),
             static=True,
         )
@@ -169,7 +177,7 @@ def render(space: Space, app_id: str = "space", spawn: bool = True) -> None:
                     [math.cos(a.msg.yaw) * a.length, math.sin(a.msg.yaw) * a.length, 0]
                     for a in arrows
                 ],
-                colors=[hex_to_rgb(a.color) for a in arrows],
+                colors=[_rgba(a) for a in arrows],
             ),
             static=True,
         )
@@ -180,7 +188,7 @@ def render(space: Space, app_id: str = "space", spawn: bool = True) -> None:
             rr.Boxes3D(
                 centers=[[b.center.x, b.center.y, 0] for b in boxes],
                 half_sizes=[[b.size.x / 2, b.size.y / 2, b.size.z / 2] for b in boxes],
-                colors=[hex_to_rgb(b.color) for b in boxes],
+                colors=[_rgba(b) for b in boxes],
                 labels=[b.label or "" for b in boxes] if any(b.label for b in boxes) else None,
             ),
             static=True,
@@ -191,7 +199,7 @@ def render(space: Space, app_id: str = "space", spawn: bool = True) -> None:
             f"scene/polylines/{i}",
             rr.LineStrips3D(
                 strips=[[[p.x, p.y, 0] for p in el.msg.poses]],
-                colors=[hex_to_rgb(el.color)],
+                colors=[_rgba(el)],
                 radii=[el.width / 2],
             ),
             static=True,
@@ -203,7 +211,7 @@ def render(space: Space, app_id: str = "space", spawn: bool = True) -> None:
             rr.Points3D(
                 positions=[[t.position[0], t.position[1], 0] for t in texts],
                 labels=[t.text for t in texts],
-                colors=[hex_to_rgb(t.color) for t in texts],
+                colors=[_rgba(t) for t in texts],
                 radii=[0.01] * len(texts),
             ),
             static=True,

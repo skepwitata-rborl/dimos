@@ -255,26 +255,32 @@ class TestSVGRender:
         assert svg.endswith("</svg>")
 
     def test_point_renders_circle(self):
+        from dimos.memory2.vis import color
+
         s = Space()
         s.add(Point(GeoPoint(3, 4, 0), color="red", label="hi"))
         svg = s.to_svg()
         assert "<circle" in svg
-        assert "red" in svg
+        assert color.red.hex() in svg
         assert "hi" in svg
 
     def test_pose_renders_polygon(self):
+        from dimos.memory2.vis import color
+
         s = Space()
         s.add(Pose(PoseStamped(1, 2, 0), color="blue"))
         svg = s.to_svg()
         assert "<polygon" in svg
-        assert "blue" in svg
+        assert color.blue.hex() in svg
 
     def test_arrow_renders_polygon(self):
+        from dimos.memory2.vis import color
+
         s = Space()
         s.add(Arrow(PoseStamped(0, 0, 0, 0, 0, 0.38, 0.92), color="orange"))
         svg = s.to_svg()
         assert "<polygon" in svg
-        assert "orange" in svg
+        assert color.orange.hex() in svg
 
     def test_polyline_renders(self):
         s = Space()
@@ -305,11 +311,13 @@ class TestSVGRender:
         assert "hello &lt;world&gt;" in svg
 
     def test_camera_without_info_renders_dot(self):
+        from dimos.memory2.vis import color
+
         s = Space()
         s.add(Camera(pose=PoseStamped(1, 2, 0), color="purple"))
         svg = s.to_svg()
         assert "<circle" in svg
-        assert "purple" in svg
+        assert color.purple.hex() in svg
 
     def test_occupancy_grid_renders_image(self):
         grid = OccupancyGrid(
