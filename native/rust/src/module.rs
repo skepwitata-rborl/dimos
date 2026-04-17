@@ -80,12 +80,10 @@ fn parse_config_json<C: DeserializeOwned>(line: &str) -> io::Result<(HashMap<Str
     }
 
     let config: C = match json.get("config") {
-        None => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "missing 'config' field in stdin JSON — coordinator must always send a config object",
-            ))
-        }
+        None => return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "missing 'config' field in stdin JSON — coordinator must always send a config object",
+        )),
         Some(v) => serde_json::from_value(v.clone()).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,

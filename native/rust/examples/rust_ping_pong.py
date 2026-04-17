@@ -40,12 +40,14 @@ class PingConfig(NativeModuleConfig):
     executable: str = str(_EXAMPLES / "native_ping")
     build_command: str = "cargo build --examples --release"
     cwd: str = str(_RUST_DIR)
+    stdin_config: bool = True
 
 
 class PongConfig(NativeModuleConfig):
     executable: str = str(_EXAMPLES / "native_pong")
     build_command: str = "cargo build --examples --release"
     cwd: str = str(_RUST_DIR)
+    stdin_config: bool = True
     sample_config: int = 42
 
 

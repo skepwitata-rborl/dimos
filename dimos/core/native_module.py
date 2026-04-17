@@ -84,6 +84,10 @@ class NativeModuleConfig(ModuleConfig):
     shutdown_timeout: float = 10.0
     log_format: LogFormat = LogFormat.TEXT
 
+    # New version of Native Modules read json configs from stdin
+    # Enable this to read from stdin instead of cli args
+    stdin_config: bool = False
+
     # Override in subclasses to exclude fields from CLI arg generation
     cli_exclude: frozenset[str] = frozenset()
 
@@ -174,9 +178,6 @@ class NativeModule(Module):
             cmd=" ".join(cmd),
             cwd=cwd,
         )
-        config_dict = self.config.to_config_dict()
-        stdin_blob = json.dumps({"topics": topics, "config": config_dict or None}).encode() + b"\n"
-
         self._process = subprocess.Popen(
             cmd,
             env=env,
@@ -186,7 +187,12 @@ class NativeModule(Module):
             stderr=subprocess.PIPE,
         )
         assert self._process.stdin is not None
-        self._process.stdin.write(stdin_blob)
+        if self.config.stdin_config:
+            config_dict = self.config.to_config_dict()
+            stdin_blob = (
+                json.dumps({"topics": topics, "config": config_dict or None}).encode() + b"\n"
+            )
+            self._process.stdin.write(stdin_blob)
         self._process.stdin.close()
         logger.info(
             f"Native process started: {module_name}",
