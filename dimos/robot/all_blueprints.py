@@ -105,14 +105,11 @@ all_blueprints = {
 
 
 all_modules = {
-    "arise-sim-adapter": "dimos.navigation.smart_nav.arise_sim_adapter.AriseSimAdapter",
-    "arise-slam": "dimos.navigation.smart_nav.modules.arise_slam.arise_slam.AriseSLAM",
     "arm-teleop-module": "dimos.teleop.quest.quest_extensions.ArmTeleopModule",
     "b-box-navigation-module": "dimos.navigation.bbox_navigation.BBoxNavigationModule",
     "b1-connection-module": "dimos.robot.unitree.b1.connection.B1ConnectionModule",
     "camera-module": "dimos.hardware.sensors.camera.module.CameraModule",
     "cartesian-motion-controller": "dimos.manipulation.control.servo_control.cartesian_motion_controller.CartesianMotionController",
-    "click-to-goal": "dimos.navigation.smart_nav.modules.click_to_goal.click_to_goal.ClickToGoal",
     "cmd-vel-mux": "dimos.navigation.smart_nav.modules.movement_manager.movement_manager.MovementManager",
     "control-coordinator": "dimos.control.coordinator.ControlCoordinator",
     "cost-mapper": "dimos.mapping.costmapper.CostMapper",
@@ -159,7 +156,6 @@ all_modules = {
     "object-tracker2-d": "dimos.perception.object_tracker_2d.ObjectTracker2D",
     "object-tracker3-d": "dimos.perception.object_tracker_3d.ObjectTracker3D",
     "object-tracking": "dimos.perception.object_tracker.ObjectTracking",
-    "odom-adapter": "dimos.navigation.smart_nav.modules.odom_adapter.odom_adapter.OdomAdapter",
     "osm-skill": "dimos.agents.skills.osm.OsmSkill",
     "path-follower": "dimos.navigation.smart_nav.modules.path_follower.path_follower.PathFollower",
     "patrolling-module": "dimos.navigation.patrolling.module.PatrollingModule",

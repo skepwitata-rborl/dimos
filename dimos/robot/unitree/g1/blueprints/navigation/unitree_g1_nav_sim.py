@@ -24,12 +24,12 @@ Full navigation stack with:
 Odometry routing (per CMU ICRA 2022 Fig. 11):
 - Local path modules (LocalPlanner, PathFollower, SensorScanGen):
   use raw odometry — they follow paths in the local odometry frame.
-- Global/terrain modules (SimplePlanner, ClickToGoal, TerrainAnalysis):
+- Global/terrain modules (SimplePlanner, MovementManager, TerrainAnalysis):
   use PGO corrected_odometry — they need globally consistent positions
   for terrain classification, costmap building, and goal coordinates.
 
 Data flow:
-    Click → ClickToGoal (corrected_odom) → goal → SimplePlanner (corrected_odom)
+    Click → MovementManager (corrected_odom) → goal → SimplePlanner (corrected_odom)
     → way_point → LocalPlanner (raw odom) → path → PathFollower (raw odom)
     → nav_cmd_vel → MovementManager → cmd_vel → UnityBridgeModule
 

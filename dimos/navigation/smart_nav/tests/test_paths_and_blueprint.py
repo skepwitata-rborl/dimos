@@ -32,7 +32,6 @@ class TestAllNativeModulePaths:
             "path_follower",
             "far_planner",
             "tare_planner",
-            "arise_slam",
         ]
     )
     def native_module(self, request):

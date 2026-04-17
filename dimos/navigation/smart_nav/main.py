@@ -87,8 +87,8 @@ def smart_nav(
 
     Args:
         use_tare: Add the TARE frontier-based exploration planner. Auto-remaps
-            ClickToGoal's `way_point` output so TARE has exclusive control of
-            LocalPlanner's waypoint input.
+            MovementManager's `way_point` output so TARE has exclusive control
+            of LocalPlanner's waypoint input.
         use_terrain_map_ext: Add TerrainMapExt — the persistent extended terrain
             accumulator used for visualization and wider-range planning.
         vehicle_height: Ignore terrain points above this height (m). Threaded
