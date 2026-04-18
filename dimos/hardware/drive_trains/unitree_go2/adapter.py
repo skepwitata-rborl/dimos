@@ -815,10 +815,23 @@ class UnitreeGo2TwistAdapter:
         except Exception as e:
             logger.warning(f"[Go2] BalanceStand raised before rage toggle: {e}")
 
-        if self._call_sport_api(self._SPORT_API_ID_RAGEMODE, {"data": enable}):
-            logger.info(f"[Go2] ✓ Rage Mode {'enabled' if enable else 'disabled'}")
-            return True
-        return False
+        if not self._call_sport_api(self._SPORT_API_ID_RAGEMODE, {"data": enable}):
+            return False
+
+        # FsmRageMode defaults joystick off (policy self-drives). Flip it
+        # on so SportClient.Move() commands from SDK callers are accepted.
+        # Best-effort — log non-zero codes but don't fail the whole toggle.
+        if enable:
+            try:
+                with session.lock:
+                    ret = session.client.SwitchJoystick(True)
+                if ret != 0:
+                    logger.warning(f"[Go2] SwitchJoystick(True) after rage returned {ret}")
+            except Exception as e:
+                logger.warning(f"[Go2] SwitchJoystick raised after rage enable: {e}")
+
+        logger.info(f"[Go2] ✓ Rage Mode {'enabled' if enable else 'disabled'}")
+        return True
 
     def _call_sport_api(self, api_id: int, payload: dict | None = None) -> bool:
         """Generic escape hatch for undocumented mcf sport API IDs.
