@@ -36,10 +36,17 @@
         # is requiring the user to enter ``nix develop`` before
         # running their blueprint, which defeats the point of dimos
         # being a normal Python library you can import and run.
+        # On Linux, arduino-cli ships a bwrap-wrapped FHS environment
+        # that fails on sandboxed hosts.  The unwrapped Go binary
+        # (pureGoPkg) works everywhere.  On macOS, pureGoPkg doesn't
+        # exist — the plain package is already unwrapped.
+        arduino-cli-unwrapped =
+          pkgs.arduino-cli.pureGoPkg or pkgs.arduino-cli;
+
         dimos_arduino_tools = pkgs.symlinkJoin {
           name = "dimos-arduino-tools";
           paths = [
-            pkgs.arduino-cli.pureGoPkg
+            arduino-cli-unwrapped
             pkgs.avrdude
             pkgs.qemu
           ];
@@ -76,21 +83,8 @@
         devShells.default = pkgs.mkShell {
           packages = [
             arduino_bridge
-            # Use the unwrapped Go binary (`pureGoPkg`) instead of the
-            # default `pkgs.arduino-cli`, which is a bwrap-wrapped FHS
-            # environment.  The wrapper exists to satisfy pure-NixOS
-            # hosts that lack `/lib64/ld-linux-x86-64.so.2`, but on any
-            # host with nix-ld or a normal FHS layout (Ubuntu, Debian,
-            # Fedora, ...) bwrap is pure overhead — and on sandboxed
-            # hosts that block `unshare(CLONE_NEWUSER)` + uid_map writes
-            # it fails outright.  The pureGoPkg binary is dynamically
-            # linked against nixpkgs' glibc via a /nix/store path which
-            # is always present, and the AVR toolchain arduino-cli
-            # downloads into `~/.arduino15/` is plain Debian ELF that
-            # runs natively wherever `/lib64/ld-linux-x86-64.so.2`
-            # resolves — i.e. every non-NixOS Linux, and NixOS with
-            # nix-ld enabled.
-            pkgs.arduino-cli.pureGoPkg
+            # Reuse the same unwrapped binary defined above.
+            arduino-cli-unwrapped
             pkgs.avrdude
             pkgs.picocom
             # qemu-system-avr for virtual-Arduino mode.  `pkgs.qemu` builds
