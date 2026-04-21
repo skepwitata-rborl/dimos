@@ -79,4 +79,5 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 # Removed --cov flags so a quick `pytest` run doesn't require pytest-cov to be installed
 # Added -x so the test run stops on the first failure — easier to debug locally
-addopts = "-v -x"
+# Added -p no:warnings to suppress noisy deprecation warnings while exploring the codebase
+addopts = "-v -x -p no:warnings"
