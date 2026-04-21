@@ -2,6 +2,10 @@
 
 A framework for building dimensional, agent-based robotic systems
 with reactive pipelines, memory management, and multimodal capabilities.
+
+Personal fork notes:
+    - Forked for learning and experimentation with agent-based robotics.
+    - Upstream: https://github.com/dimensionalOS/dimos
 """
 
 from importlib.metadata import PackageNotFoundError, version
